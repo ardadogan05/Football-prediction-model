@@ -16,36 +16,36 @@ def calculateSimulation(stats):
     homeAdvantage = stats["homeAdvantage"] # boost for home team, based on: https://www.premierleague.com/en/news/4032415, 1.1(very low) - 1.25 (average is 1.3)
     awayDisadvantage = stats["awayDisadvantage"]
 
-    
+    #Different lambda calculations in case H2h data isn't availabe. Important that xG and xGa are equal to avoid punishing defensive teams.
     if stats["xG h2h team 1"] != 0 or stats["xG h2h team 2"] != 0:
         lambda1 = (0.1875*stats["xG form 1"] + 
-                   0.325*stats["xG szn avg 1"] + 
+                   0.2626*stats["xG szn avg 1"] + 
                    0.1875*stats["xGa form 2"] + 
-                   0.20*stats["xGa szn avg 2"] + 
+                   0.2626*stats["xGa szn avg 2"] + 
                    0.10*stats["xG h2h team 1"])
           
         lambda2 = (0.1875*stats["xG form 2"] + 
-                   0.325*stats["xG szn avg 2"] + 
+                   0.2625*stats["xG szn avg 2"] + 
                    0.1875*stats["xGa form 1"] + 
-                   0.20*stats["xGa szn avg 1"] + 
+                   0.2625*stats["xGa szn avg 1"] + 
                    0.10*stats["xG h2h team 2"]) 
         
     else:
         lambda1 = (0.20*stats["xG form 1"] + 
-                   0.35*stats["xG szn avg 1"] + 
-                   0.25*stats["xGa form 2"] + 
+                   0.30*stats["xG szn avg 1"] + 
+                   0.30*stats["xGa form 2"] + 
                    0.20*stats["xGa szn avg 2"])
         
         lambda2 = (0.20*stats["xG form 2"] + 
-                   0.35*stats["xG szn avg 2"] +
-                   0.25*stats["xGa form 1"] + 
+                   0.30*stats["xG szn avg 2"] +
+                   0.30*stats["xGa form 1"] + 
                    0.20*stats["xGa szn avg 1"])
 
-    print("Home and away advantage; ", homeAdvantage, awayDisadvantage)
     lambda1 *= homeAdvantage 
     lambda2 *= awayDisadvantage 
 
-    if (team1LeagueCoef != team2LeagueCoef):
+#Inital planned to print out xG, but tuning the model to match the betmakers causes the xG to not be representative. 
+    if (team1LeagueCoef != team2LeagueCoef): #if could be removed, but doesn't matter
         lambda1 *=  team1LeagueCoef
         lambda2 *=  team2LeagueCoef
 
@@ -56,15 +56,12 @@ def calculateSimulation(stats):
     max_boost = 0.8
 
 
-    print(lambda1, lambda2)
-    
-
     if dlambda >= 0:
         if dlambda <= 0.15:
             boost = min(dlambda * beta_close_gap, max_boost)
             lambda1 *= (1+boost/2)
             lambda2 /= (1+boost/2)
-        if dlambda <= 0.45:
+        elif dlambda <= 0.45:
             boost = min(dlambda*beta_medium_gap, max_boost)
             lambda1 *= (1+boost/2)
             lambda2 /= (1+boost/2)
@@ -79,7 +76,7 @@ def calculateSimulation(stats):
             lambda1 /= (1+boost/2)
             lambda2 *= (1+boost/2)
 
-        if abs(dlambda) <= 0.45:
+        elif abs(dlambda) <= 0.45:
             boost = min(abs(dlambda)*beta_medium_gap, max_boost)
             lambda1 /= (1+boost/2)
             lambda2 *= (1+boost/2)

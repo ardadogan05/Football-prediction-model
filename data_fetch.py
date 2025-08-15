@@ -21,7 +21,7 @@ def dataFetch(userInput1, userInput2, stats):
     print(team1,team2)
 
 
-    # the names are used to find xG on H2H page, therefore it must have the format "manchster city", instead of "manchester-city", which is what the fetchID returns.
+    # the names are used to find xG on H2H page, therefore it must have the format "manchester city", instead of "manchester-city", which is what the fetchID returns.
 
     def teamNameFromID(team): #allows input like man city and man utd to get turned into "manchester city" and "manchester united". Is derived from the URL from search API
         if len(team.split('-')) == 3:
@@ -102,10 +102,9 @@ def dataFetch(userInput1, userInput2, stats):
         total_xG_team2 = 0
         count = 0
         i = 0
-        #Doesn't feel clean, but is functional. Fix if deemed neccessary
         lastGameDate = df_h2h[0]["Date"][0]
 
-        if int(lastGameDate.split('-')[0]) > 2022: #Not doing H2H xG stats if game is played in 2022 or ealier. Avoids old games and lack of xG, and scraping doesn't work
+        if int(lastGameDate.split('-')[0]) > 2022: #Not doing H2H xG stats if game is played in 2022 or earlier. Avoids old games and lack of xG, and scraping doesn't work
             def match_teams(originalNames, scrapedNames): #Names used for teams in the H2H columns are inconsistent, this part takes both names, and matches the closest ones
                 matched = {}
                 for orig in originalNames:
@@ -177,12 +176,12 @@ def dataFetch(userInput1, userInput2, stats):
     xg_form2 = xg_column2.tail(form_sample_size).mean()
     xga_form2 = xga_column2.tail(form_sample_size).mean()
 
+    #To nerf or boost teams that play continental games. The values are based on Opta's league rankings (avg. team strength, altered so that EPL is 1)
+    # https://theanalyst.com/articles/strongest-leagues-in-the-world-opta-power-rankings-june-2025 
     leagueCoefficient = {"Premier League" : 1, "Serie A": 0.9395, "La Liga" : 0.9395, "Bundesliga" : 0.9320, "Ligue 1" : 0.9233}
-    team1LeagueCoef = leagueCoefficient[team1League]
-    team2LeagueCoef = leagueCoefficient[team2League]
 
     #For dynamic home and away boost: Idea is to look at over/underperformance of xG home and away, and give boost/decrease in xG accordingly
-    #Home team
+    #Home team, xG per game at home / xG per game 
     team1Venue = df1[1]["Venue"]
     home_count = 0
     team1_home_xG = 0
@@ -202,8 +201,6 @@ def dataFetch(userInput1, userInput2, stats):
         if venue == "Away" and not pd.isna(xg_column2[i]):
             team2_away_xG += xg_column2[i]
             away_count += 1
-        else:
-            continue
     awayDisadvantage = (team2_away_xG/away_count)/xg_seasonavg2
 
     #limit the dynamic home and away advantages, avoid making home team favorites every time.
@@ -219,7 +216,7 @@ def dataFetch(userInput1, userInput2, stats):
     homeAdvantage = np.clip(1, homeAdvantage, 1.10) #Arsenal actually underperform their xG at home. Counterintuitive that they get worse at home, therefore no nerf for home team.
     awayDisadvantage = np.clip(0.90, awayDisadvantage, 1.00)
 
-    
+    #Add key and value to dict to use later, maybe suboptimal, but works.
     stats["homeAdvantage"] = homeAdvantage
     stats["awayDisadvantage"] = awayDisadvantage
 
@@ -246,11 +243,6 @@ def dataFetch(userInput1, userInput2, stats):
     stats["team 1 league coef"] = leagueCoefficient[team1League]
     stats["team 2 league coef"] = leagueCoefficient[team2League]
 
-    print("xG per game home:", (team1_home_xG/home_count))
-    print("xG per game home list: ", np.nanmean(xG_home_list))
-    print("xG per game szn avg: ", xg_column1.mean())
-    
-    
     return stats
 
 

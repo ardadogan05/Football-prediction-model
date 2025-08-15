@@ -25,8 +25,6 @@ def fetchID(query):
     for part in FBrefURL.split('/'):
         if part.strip() != "":
             parts.append(part)
-        else:
-            continue
     
     FBrefID = parts[4]
     nameList = parts[-1].split('-')
@@ -37,8 +35,6 @@ def fetchID(query):
         FBrefName = nameList[0] + "-" + nameList[1]
     elif len(nameList) == 2:
         FBrefName = nameList[0]
-    elif len(nameList) == 4:
-        FBrefName = nameList[0] + "-" + nameList[1] + "-" + nameList[2]
     elif len(nameList) == 5:
         FBrefName = nameList[0] + "-" + nameList[1] + "-" + nameList[2] + "-" + nameList[3]
     else:

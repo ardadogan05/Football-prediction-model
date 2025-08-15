@@ -114,7 +114,7 @@ def runSimulation():
 
 #"Simulate button"
 
-button = customtkinter.CTkButton(app, text = "Calculate probabilites", command = runSimulation)
+button = customtkinter.CTkButton(app, text = "Calculate probabilities", command = runSimulation)
 button.place(x = 530, y = 600)
 
 swap_icon = customtkinter.CTkImage(Image.open("Pictures/swap_icon.png"), size = (30,30))
