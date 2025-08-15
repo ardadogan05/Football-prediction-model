@@ -30,6 +30,8 @@ Lambda values, representing the average xG per team per match, are based on a we
 
 ## Limitations
 
+The model currently uses data from 2024-2025, as the 2025-2026 season is yet to begin (as of August 15th, 2025). Therefore, the model will not be able to predict any games until at least 6 games have been played, and will get more accurate as more games are played.
+
 The model uses subjective lambda values with no calibration to actual results, does not account for public-perception bias in bookmaker odds, uses xG data from all competitions (which can inflate stats for Europa League or Conference League teams compared to Champions League sides), does not generate predictions for newly promoted teams until they have played at least six matches in all competitions, and has some messy variable names such as `team1Name` and `team2-name`. The model does not take player injuries into account. This means that if an important player is to get hurt, e.g., Rodri for Manchester City last year, the drop in team performance will be visible after it is shown in the decrease in xG and/or increase in xGa. The inverse also applies; new signings late in the transfer window, or in January, will not directly affect the model.
 
 Fbref does ban IP addresses that send too many requests, therefore be wary: 
