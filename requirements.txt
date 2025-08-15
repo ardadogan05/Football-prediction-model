@@ -1,0 +1,6 @@
+customtkinter
+Pillow
+numpy
+requests
+pandas
+python-dotenv
