@@ -1,6 +1,6 @@
 # Football Match Prediction Model
 
-*README based on a summary of my vocal notes while building this project. Provided by OpenAI's ChatGPT 5*
+*README based on a summary of my audio notes while building this project. Provided by OpenAI's ChatGPT 5*
 
 ## Overview
 
