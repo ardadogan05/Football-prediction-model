@@ -32,6 +32,11 @@ Lambda values, representing the average xG per team per match, are based on a we
 
 The model uses subjective lambda values with no calibration to actual results, does not account for public-perception bias in bookmaker odds, uses xG data from all competitions (which can inflate stats for Europa League or Conference League teams compared to Champions League sides), does not generate predictions for newly promoted teams until they have played at least six matches in all competitions, and has some messy variable names such as `team1Name` and `team2-name`. The model does not take player injuries into account. This means that if an important player is to get hurt, e.g., Rodri for Manchester City last year, the drop in team performance will be visible after it is shown in the decrease in xG and/or increase in xGa. The inverse also applies; new signings late in the transfer window, or in January, will not directly affect the model.
 
+Fbref does ban IP addresses that send too many requests, therefore be wary: 
+- Max 10 requests/min to FBref & Stathead
+- Max 20 requests/min to other sites
+- Violations result in a 1-day IP block
+
 ---
 
 ## Models Considered (Not Implemented)
@@ -50,6 +55,9 @@ The project began by scraping FBRef, but I ran into dynamic URL issues with team
 
 Lee, M., & Smith, G. (2002). Regression to the mean and football wagers. *Journal of Behavioral Decision Making*, 15, 329–342. [https://doi.org/10.1002/BDM.418](https://doi.org/10.1002/BDM.418)
 
+---
+## Known glitches
+I have tried this code on 3 different machines, and have encountered a glitch where the probability bar ends up in a random place in the GUI, instead of under the output box. There seems to be an issue when using customTkinter and Tkinter on some devices. The easiest solution is to remove the probability bar, as it is purely visual.
 ---
 
 ## Try the code yourself!
