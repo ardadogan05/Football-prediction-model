@@ -56,7 +56,9 @@ The project began by scraping FBRef, but I ran into dynamic URL issues with team
 Lee, M., & Smith, G. (2002). Regression to the mean and football wagers. *Journal of Behavioral Decision Making*, 15, 329–342. [https://doi.org/10.1002/BDM.418](https://doi.org/10.1002/BDM.418)
 
 ---
+
 ## Known glitches
+
 I have tried this code on 3 different machines, and have encountered a glitch where the probability bar ends up in a random place in the GUI, instead of under the output box. There seems to be an issue when using customTkinter and Tkinter on some devices. The easiest solution is to remove the probability bar, as it is purely visual.
 ---
 
