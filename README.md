@@ -47,3 +47,15 @@ The project began by scraping FBRef, but I ran into dynamic URL issues with team
 ## Reference
 
 Lee, M., & Smith, G. (2002). Regression to the mean and football wagers. *Journal of Behavioral Decision Making*, 15, 329–342. [https://doi.org/10.1002/BDM.418](https://doi.org/10.1002/BDM.418)
+
+---
+
+## Try the code yourself!
+As I have been advised against sharing my API key for Brave SearchAPI with you, you will need to create one yourself. It is free of charge, and can be done at [https://brave.com/search/api/]. You will need to do the following:
+
+* Clone the repository
+* Download all the required libraries by writing "pip install -r requirements.txt" in the terminal.
+* Create your own .env file with your API key (or directly write it in FBrefIDFetch.py).
+* Run the gui.py file.
+Please send me a message if you have ideas to improve the code, or encounter errors.
+IKKE BETTE STORSTIPENDED PÅ MODELLEN
