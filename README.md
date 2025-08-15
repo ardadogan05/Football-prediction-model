@@ -53,11 +53,11 @@ Lee, M., & Smith, G. (2002). Regression to the mean and football wagers. *Journa
 ---
 
 ## Try the code yourself!
-As I have been advised against sharing my API key for Brave SearchAPI with you, you will need to create one yourself. It is free of charge and can be done at https://brave.com/search/api/. You will need to do the following:
+As I have been advised against sharing my API key for Brave Search API with you, you will need to create one yourself. It is free of charge and can be done at https://brave.com/search/api/. You will need to do the following:
 
 * Clone the repository
-* Download all the required libraries by writing "pip install -r requirements.txt" in the terminal.
+* Install the required libraries by writing "pip install -r requirements.txt" in the terminal.
 * Create your own .env file with your API key (or directly write it in FBrefIDFetch.py).
 * Run the gui.py file.
 Please send me a message if you have ideas to improve the code or encounter errors.
-IKKE BETTE STORSTIPENDED PÅ MODELLEN
+IKKE BETTE STORSTIPENDET MED TIPS FRA MODELLEN
