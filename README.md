@@ -6,7 +6,7 @@
 
 This project predicts the outcome of football matches between teams in the top 5 European leagues (as defined by Opta Aug. 2025) using **expected goals (xG)** data from FBRef. It scrapes data through the Brave Search API, runs thousands of Poisson-based simulations, and outputs win/draw/loss probabilities.
 
-The goal was to get predictions close to bookmaker odds, since they have extremely advanced models, while still building my own lambda calculation. I can’t fully calibrate it to actual results, so the lambda values are based on my own reasoning, not perfect, but fine for this project.
+The goal was to get predictions close to bookmaker odds, since they have extremely advanced models, while still building my own lambda calculation. I can’t fully calibrate it to actual results, so the lambda values are based on my own reasoning, not perfect, but fine for this project. The idea to ground the model in the betting odds came after realizing that I couldn't calibrate it.
 
 For a more serious production build, I would store scraped data in a file (preferably JSON, but CSV is fine) so the program doesn’t waste resources scraping every time it runs. Right now, everything is freshly scraped on each run.
 
@@ -14,7 +14,9 @@ For a more serious production build, I would store scraped data in a file (prefe
 
 ## Key Features
 
-The model includes dynamic home and away advantage factors based on real xG over and underperformance, fuzzy matching to handle typos and inconsistent team names, exception handling for missing or outdated data, league strength coefficients for cross-league matchups based on Opta’s rankings, and a GUI with a swap button, logos, and proper data credits.
+The model includes dynamic home and away advantage factors based on real xG over and underperformance, fuzzy matching to handle typos and inconsistent team names, exception handling for missing or outdated data, league strength coefficients for cross-league matchups based on Opta’s rankings, and a modern GUI with logos and proper data credits.
+
+By using Brave Search API, the code allows a variety of different names for teams. The API searches on FBref using the given input and allows them to find the full/proper name for the club, thus making it easier for me.
 
 ---
 
@@ -51,11 +53,11 @@ Lee, M., & Smith, G. (2002). Regression to the mean and football wagers. *Journa
 ---
 
 ## Try the code yourself!
-As I have been advised against sharing my API key for Brave SearchAPI with you, you will need to create one yourself. It is free of charge, and can be done at [https://brave.com/search/api/]. You will need to do the following:
+As I have been advised against sharing my API key for Brave SearchAPI with you, you will need to create one yourself. It is free of charge and can be done at https://brave.com/search/api/. You will need to do the following:
 
 * Clone the repository
 * Download all the required libraries by writing "pip install -r requirements.txt" in the terminal.
 * Create your own .env file with your API key (or directly write it in FBrefIDFetch.py).
 * Run the gui.py file.
-Please send me a message if you have ideas to improve the code, or encounter errors.
+Please send me a message if you have ideas to improve the code or encounter errors.
 IKKE BETTE STORSTIPENDED PÅ MODELLEN
