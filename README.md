@@ -59,11 +59,12 @@ Lee, M., & Smith, G. (2002). Regression to the mean and football wagers. *Journa
 
 ## Known glitches
 
-I have tried this code on 3 different machines, and have encountered a glitch where the probability bar ends up in a random place in the GUI, instead of under the output box. There seems to be an issue when using customTkinter and Tkinter on some devices. The easiest solution is to remove the probability bar, as it is purely visual.
+I have tried this code on 3 different machines, and have encountered a glitch where the probability bar ends up in a random place in the GUI instead of under the output box. There seems to be an issue when using customTkinter and Tkinter on some devices. The easiest solution is to remove the probability bar, as it is purely visual.
+
 ---
 
 ## Try the code yourself!
-As I have been advised against sharing my API key for Brave Search API with you, you will need to create one yourself. It is free of charge and can be done at https://brave.com/search/api/. You will need to do the following:
+As I have been advised against sharing my API key for Brave Search API with you, you will need to create one yourself. It is free of charge and can be done at [https://brave.com/search/api/](https://brave.com/search/api/). You will need to do the following:
 
 * Clone the repository
 * Install the required libraries by writing "pip install -r requirements.txt" in the terminal.
