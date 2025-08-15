@@ -1,4 +1,4 @@
-import requests #be able to send request to http (get data from website)
+import curl_cffi #be able to send request to http (get data from website)
 import pandas as pd #handle files
 from io import StringIO #read html as file-like object
 import time #to avoid getting blocked from fbref from scraping too often
@@ -58,16 +58,16 @@ def dataFetch(userInput1, userInput2, stats):
     h2h_url = build_urlh2h(team1ID, team2ID, team1, team2, season)
 
     #Timeout if website doesn't load in 10s, sleep to not get ip banned for scraping
-    html_content1  = requests.get(team1_url, timeout=10)
+    html_content1  = curl_cffi.get(team1_url, impersonate= "chrome124", timeout=10)
     time.sleep(1.25)
-    html_content2  = requests.get(team2_url,timeout=10)
+    html_content2  = curl_cffi.get(team2_url,impersonate= "chrome124", timeout=10)
     time.sleep(1.25)
 
     try:
-        h2h_content =  requests.get(h2h_url, timeout=10)
+        h2h_content =  curl_cffi.get(h2h_url, impersonate="chrome124", timeout=10)
         h2h_content.raise_for_status() #raises error if unable to scrape
 
-    except requests.exceptions.RequestException: #handles all forms for errors
+    except curl_cffi.exceptions.RequestException: #handles all forms for errors
         print("H2H data is unavailabe or there was an error loading the data")
         h2h_content = None
 

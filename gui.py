@@ -78,6 +78,7 @@ canvas = tk.Canvas(app, width= 400, height= 15, highlightthickness=0, highlightc
 canvas.place(x = 400, y = 500)
 
 
+
 #simulation function: 
 def runSimulation():
     canvas.delete("all")

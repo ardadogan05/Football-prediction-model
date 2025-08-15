@@ -1,6 +1,7 @@
 customtkinter
 Pillow
 numpy
-requests
+curl_cffi
+lxml
 pandas
 python-dotenv
