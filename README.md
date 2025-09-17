@@ -63,6 +63,9 @@ Lee, M., & Smith, G. (2002). Regression to the mean and football wagers. *Journa
 
 I have tried this code on 3 different machines, and have encountered a glitch where the probability bar ends up in a random place in the GUI instead of under the output box. There seems to be an issue when using customTkinter and Tkinter on some devices. The easiest solution is to remove the probability bar, as it is purely visual.
 
+**Note (17.09.2025):** The website is currently unavailable (403 error), meaning that stats cannot be scraped and used. This seems to be related to Cloudflare restrictions, and I’ll be working on a proper fix once I have more time. 
+
+
 ---
 
 ## Try the code yourself!
