@@ -75,5 +75,3 @@ As I have been advised against sharing my API key for Brave Search API with you,
 * Install the required libraries by writing "pip install -r requirements.txt" in the terminal.
 * Create your own .env file with your API key (or directly write it in FBrefIDFetch.py).
 * Run the gui.py file.
-Please send me a message if you have ideas to improve the code or encounter errors.
-IKKE BETTE STORSTIPENDET MED TIPS FRA MODELLEN
