@@ -3,3 +3,18 @@
 
 __pycache__/
 *.py[cod]
+
+# Local data snapshots and generated artifacts
+data/raw/
+data/processed/
+data/models/
+data/predictions/
+reports/
+
+# Python tooling
+.pytest_cache/
+.pytest_temp/
+.ruff_cache/
+.coverage
+*.egg-info/
+.venv/

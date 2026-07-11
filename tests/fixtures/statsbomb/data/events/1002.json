@@ -1,0 +1,16 @@
+[
+  {
+    "id": "event-5",
+    "period": 1,
+    "type": {"name": "Shot"},
+    "team": {"id": 2, "name": "Away FC"},
+    "shot": {"statsbomb_xg": 0.3, "outcome": {"name": "Goal"}}
+  },
+  {
+    "id": "event-6",
+    "period": 2,
+    "type": {"name": "Shot"},
+    "team": {"id": 1, "name": "Home FC"},
+    "shot": {"outcome": {"name": "Goal"}}
+  }
+]
