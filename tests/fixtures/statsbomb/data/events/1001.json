@@ -1,0 +1,33 @@
+[
+  {
+    "id": "event-1",
+    "period": 1,
+    "type": {"name": "Shot"},
+    "team": {"id": 1, "name": "Home FC"},
+    "shot": {"statsbomb_xg": 0.1, "outcome": {"name": "Saved"}}
+  },
+  {
+    "id": "event-2",
+    "period": 2,
+    "type": {"name": "Shot"},
+    "team": {"id": 1, "name": "Home FC"},
+    "shot": {
+      "statsbomb_xg": 0.76,
+      "type": {"name": "Penalty"},
+      "outcome": {"name": "Goal"}
+    }
+  },
+  {
+    "id": "event-3",
+    "period": 2,
+    "type": {"name": "Shot"},
+    "team": {"id": 2, "name": "Away FC"},
+    "shot": {"statsbomb_xg": 0.2, "outcome": {"name": "Saved"}}
+  },
+  {
+    "id": "event-4",
+    "period": 2,
+    "type": {"name": "Own Goal Against"},
+    "team": {"id": 2, "name": "Away FC"}
+  }
+]
