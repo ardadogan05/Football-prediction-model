@@ -12,7 +12,7 @@ from typing import Any
 
 import pandas as pd
 
-from football_prediction.config import TOP_FIVE_MENS_LEAGUES
+from football_prediction.config import is_top_five_mens_league
 from football_prediction.data.schema import (
     MATCH_COLUMNS,
     DataValidationError,
@@ -49,17 +49,7 @@ def _read_json(path: Path) -> Any:
 
 def is_selected_competition(record: dict[str, Any]) -> bool:
     """Return whether a competition-season belongs to the top five men's leagues."""
-
-    if str(record.get("competition_gender", "")).lower() != "male":
-        return False
-
-    country = record.get("country_name")
-    if country not in TOP_FIVE_MENS_LEAGUES:
-        return False
-
-    competition_name = record.get("competition_name")
-    allowed_names = TOP_FIVE_MENS_LEAGUES[country]
-    return competition_name in allowed_names
+    return is_top_five_mens_league(record)
 
 
 def selected_competitions(repository: Path) -> list[dict[str, Any]]:
@@ -211,6 +201,7 @@ def process_repository(
     processed_at = datetime.now(timezone.utc).isoformat()
     records: list[dict[str, Any]] = []
     source_matches = 0
+    handled_matches = 0
     rejection_reasons: dict[str, int] = {}
 
     for competition in competitions:
@@ -232,6 +223,9 @@ def process_repository(
                 )
             except DataValidationError as error:
                 _increment_reason(rejection_reasons, error)
+            handled_matches += 1
+            if handled_matches % 100 == 0 or handled_matches == source_matches:
+                print(f"Processed matches: {handled_matches}", flush=True)
 
     matches = pd.DataFrame.from_records(records, columns=MATCH_COLUMNS)
     if not matches.empty:

@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-STATSBOMB_REPOSITORY_URL = "https://github.com/statsbomb/open-data.git"
+STATSBOMB_COMMIT_URL = (
+    "https://api.github.com/repos/statsbomb/open-data/commits/master"
+)
+STATSBOMB_RAW_URL = "https://raw.githubusercontent.com/statsbomb/open-data"
 
 TOP_FIVE_MENS_LEAGUES: dict[str, list[str]] = {
     "England": ["Premier League"],
@@ -15,6 +18,18 @@ TOP_FIVE_MENS_LEAGUES: dict[str, list[str]] = {
     "Italy": ["Serie A"],
     "Spain": ["La Liga"],
 }
+
+
+def is_top_five_mens_league(record: dict) -> bool:
+    if str(record.get("competition_gender", "")).lower() != "male":
+        return False
+
+    country = record.get("country_name")
+    if country not in TOP_FIVE_MENS_LEAGUES:
+        return False
+
+    competition_name = record.get("competition_name")
+    return competition_name in TOP_FIVE_MENS_LEAGUES[country]
 
 
 @dataclass(frozen=True)
