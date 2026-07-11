@@ -47,6 +47,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         output = {
             "sync_action": sync.action,
             "source_changed": sync.changed,
+            "downloaded_events": sync.downloaded_events,
         }
         output.update(asdict(summary))
     elif arguments.command == "process-data":

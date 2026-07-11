@@ -13,7 +13,7 @@ from football_prediction.data.process import (
     process_repository,
 )
 from football_prediction.data.schema import DataValidationError, validate_matches
-from football_prediction.data.sync import SynchronizationError, sync_repository
+from football_prediction.data.sync import sync_repository
 
 
 FIXTURE_REPOSITORY = Path(__file__).parent / "fixtures" / "statsbomb"
@@ -156,37 +156,50 @@ def test_manifest_is_valid_json_and_records_provenance(tmp_path: Path) -> None:
     assert repeated.output_sha256 == manifest["output_sha256"]
 
 
-def test_sync_refuses_non_repository_data_directory(tmp_path: Path) -> None:
-    destination = tmp_path / "statsbomb-open-data"
-    destination.mkdir()
-    (destination / "unexpected.txt").write_text("do not overwrite", encoding="utf-8")
-
-    with pytest.raises(SynchronizationError, match="not a Git checkout"):
-        sync_repository(destination)
-
-    assert (destination / "unexpected.txt").read_text(encoding="utf-8") == "do not overwrite"
-
-
-def test_first_sync_clones_to_temporary_path_before_publish(
+def test_sync_downloads_selected_files_and_reuses_unchanged_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     destination = tmp_path / "statsbomb-open-data"
+    competitions = [
+        {
+            "competition_id": 2,
+            "season_id": 27,
+            "country_name": "England",
+            "competition_name": "Premier League",
+            "competition_gender": "male",
+            "season_name": "2015/2016",
+        }
+    ]
+    matches = [{"match_id": 1001}]
+    events = [{"id": "event-1", "period": 1}]
 
-    def fake_git(arguments: list[str], cwd: Path | None = None) -> str:
-        if arguments[0] == "clone":
-            clone_path = Path(arguments[-1])
-            assert clone_path.name.endswith(".clone-tmp")
-            (clone_path / ".git").mkdir(parents=True)
-            (clone_path / "data").mkdir()
-            return ""
-        assert arguments == ["rev-parse", "HEAD"]
-        assert cwd == destination
-        return "fixture-sha"
+    def fake_download(url: str, path: Path):
+        if url.endswith("competitions.json"):
+            data = competitions
+        elif "/matches/2/27.json" in url:
+            data = matches
+        elif "/events/1001.json" in url:
+            data = events
+        else:
+            raise AssertionError(f"Unexpected download: {url}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return data
 
-    monkeypatch.setattr(sync_module, "_run_git", fake_git)
+    monkeypatch.setattr(sync_module, "_latest_commit", lambda: "fixture-sha")
+    monkeypatch.setattr(sync_module, "_download_json", fake_download)
     result = sync_repository(destination)
 
     assert result.commit == "fixture-sha"
-    assert result.action == "cloned"
-    assert (destination / "data").is_dir()
-    assert not destination.with_name("statsbomb-open-data.clone-tmp").exists()
+    assert result.action == "downloaded"
+    assert result.downloaded_events == 1
+    assert (destination / "data" / "events" / "1001.json").is_file()
+
+    monkeypatch.setattr(
+        sync_module,
+        "_download_json",
+        lambda *_: pytest.fail("An unchanged snapshot should not redownload files"),
+    )
+    repeated = sync_repository(destination)
+    assert repeated.action == "unchanged"
+    assert not repeated.changed
