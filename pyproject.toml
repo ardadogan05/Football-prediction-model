@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "football-prediction"
 version = "0.1.0"
-description = "Leakage-safe Poisson football prediction using StatsBomb Open Data"
+description = "Leakage-safe Poisson football prediction using StatsBomb and football-data.org"
 requires-python = ">=3.10"
 dependencies = [
     "pandas>=2.2,<3.0",
