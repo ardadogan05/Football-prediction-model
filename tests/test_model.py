@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -16,7 +14,7 @@ from football_prediction.model import (
 )
 
 
-def model_matches() -> pd.DataFrame:
+def model_matches():
     matches = []
     for index in range(18):
         home_id = (index % 4) + 1
@@ -44,7 +42,7 @@ def model_matches() -> pd.DataFrame:
     return pd.DataFrame(matches)
 
 
-def test_chronological_split_never_overlaps_dates() -> None:
+def test_chronological_split_never_overlaps_dates():
     features = build_features(model_matches(), rolling_window=3)
     train, validation, test = chronological_split(features)
 
@@ -55,17 +53,15 @@ def test_chronological_split_never_overlaps_dates() -> None:
     assert len(test) == pytest.approx(len(features) * 0.2, abs=1)
 
 
-@pytest.mark.parametrize("invalid_fraction", [float("nan"), float("inf")])
-def test_chronological_split_rejects_non_finite_fractions(
-    invalid_fraction: float,
-) -> None:
+def test_chronological_split_rejects_non_finite_fractions():
     features = build_features(model_matches(), rolling_window=3)
 
-    with pytest.raises(ValueError, match="finite and positive"):
-        chronological_split(features, train_fraction=invalid_fraction)
+    for invalid_fraction in [float("nan"), float("inf")]:
+        with pytest.raises(ValueError, match="finite and positive"):
+            chronological_split(features, train_fraction=invalid_fraction)
 
 
-def test_chronological_split_keeps_duplicate_dates_together() -> None:
+def test_chronological_split_keeps_duplicate_dates_together():
     features = build_features(model_matches(), rolling_window=3)
     features.loc[features["match_id"].isin([10, 11, 12]), "match_date"] = pd.Timestamp(
         "2020-03-04"
@@ -81,7 +77,7 @@ def test_chronological_split_keeps_duplicate_dates_together() -> None:
     assert validation_dates.isdisjoint(test_dates)
 
 
-def test_fitted_lambdas_are_positive_and_deterministic() -> None:
+def test_fitted_lambdas_are_positive_and_deterministic():
     features = build_features(model_matches(), rolling_window=3)
     train, validation, _ = chronological_split(features)
     first = fit_poisson_models(train, alpha=0.1)
@@ -98,12 +94,12 @@ def test_fitted_lambdas_are_positive_and_deterministic() -> None:
 
 
 def test_small_tuning_grid_keeps_test_period_separate(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+    monkeypatch,
+):
     fitted_match_ids = []
     original_fit = model_module.fit_poisson_models
 
-    def recording_fit(features: pd.DataFrame, alpha: float = 0.1):
+    def recording_fit(features, alpha=0.1):
         fitted_match_ids.append(set(features["match_id"]))
         return original_fit(features, alpha=alpha)
 
@@ -126,10 +122,11 @@ def test_small_tuning_grid_keeps_test_period_separate(
 
     test_ids = set(result["test_features"]["match_id"])
     assert len(fitted_match_ids) == 2  # grid training, then train+validation refit
-    assert all(test_ids.isdisjoint(match_ids) for match_ids in fitted_match_ids)
+    for match_ids in fitted_match_ids:
+        assert test_ids.isdisjoint(match_ids)
 
 
-def test_unsupported_rows_are_not_imputed_or_predicted() -> None:
+def test_unsupported_rows_are_not_imputed_or_predicted():
     features = build_features(model_matches(), rolling_window=3)
     unsupported = features.loc[~features["feature_supported"]]
 
@@ -147,7 +144,7 @@ def test_unsupported_rows_are_not_imputed_or_predicted() -> None:
         predict_goals(fitted, invalid)
 
 
-def test_validation_log_loss_adapts_to_high_finite_lambdas() -> None:
+def test_validation_log_loss_adapts_to_high_finite_lambdas():
     validation = pd.DataFrame([{"home_goals": 4, "away_goals": 2}])
 
     loss = validation_log_loss(
@@ -160,7 +157,7 @@ def test_validation_log_loss_adapts_to_high_finite_lambdas() -> None:
     assert loss > 0
 
 
-def test_test_period_targets_cannot_change_tuning_selection() -> None:
+def test_test_period_targets_cannot_change_tuning_selection():
     matches = model_matches()
     features = build_features(matches, rolling_window=3)
     _, _, test = chronological_split(features)
@@ -191,7 +188,7 @@ def test_test_period_targets_cannot_change_tuning_selection() -> None:
     np.testing.assert_array_equal(original_away, mutated_away)
 
 
-def recent_source_matches() -> pd.DataFrame:
+def recent_source_matches():
     matches = model_matches().copy()
     matches["source"] = "football_data"
     matches["match_id"] += 100
@@ -204,12 +201,12 @@ def recent_source_matches() -> pd.DataFrame:
 
 
 def test_external_tuning_uses_both_sources_but_never_fits_test_rows(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+    monkeypatch,
+):
     fitted_rows = []
     original_fit = model_module.fit_poisson_models
 
-    def recording_fit(features: pd.DataFrame, alpha: float = 0.1):
+    def recording_fit(features, alpha=0.1):
         fitted_rows.append(set(zip(features["source"], features["match_id"])))
         return original_fit(features, alpha=alpha)
 
@@ -226,16 +223,23 @@ def test_external_tuning_uses_both_sources_but_never_fits_test_rows(
         zip(result["test_features"]["source"], result["test_features"]["match_id"])
     )
     assert len(fitted_rows) == 2
-    assert all(test_rows.isdisjoint(rows) for rows in fitted_rows)
-    assert all(source == "statsbomb" for source, _ in fitted_rows[0])
-    assert {source for source, _ in fitted_rows[1]} == {
+    for rows in fitted_rows:
+        assert test_rows.isdisjoint(rows)
+
+    for source, _ in fitted_rows[0]:
+        assert source == "statsbomb"
+
+    fitted_sources = set()
+    for source, _ in fitted_rows[1]:
+        fitted_sources.add(source)
+    assert fitted_sources == {
         "statsbomb",
         "football_data",
     }
     assert set(result["test_features"]["season_name"]) == {"2025/2026"}
 
 
-def test_external_test_goals_cannot_change_model_selection() -> None:
+def test_external_test_goals_cannot_change_model_selection():
     recent = recent_source_matches()
     changed = recent.copy()
     changed.loc[
@@ -266,7 +270,7 @@ def test_external_test_goals_cannot_change_model_selection() -> None:
     np.testing.assert_array_equal(original_away, mutated_away)
 
 
-def test_external_tuning_requires_chronological_source_periods() -> None:
+def test_external_tuning_requires_chronological_source_periods():
     training = model_matches().copy()
     training["match_date"] += pd.Timedelta(1_000, unit="D")
 

@@ -1,9 +1,0 @@
-customtkinter
-Pillow
-numpy
-scipy
-curl_cffi
-lxml
-pandas
-pyarrow
-python-dotenv

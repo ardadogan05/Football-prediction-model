@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 from pathlib import Path
 
@@ -19,7 +17,7 @@ from football_prediction.data.sync import sync_repository
 FIXTURE_REPOSITORY = Path(__file__).parent / "fixtures" / "statsbomb"
 
 
-def test_top_five_selection_is_explicit_and_mens_only() -> None:
+def test_top_five_selection_is_explicit_and_mens_only():
     assert is_selected_competition(
         {
             "country_name": "England",
@@ -44,8 +42,8 @@ def test_top_five_selection_is_explicit_and_mens_only() -> None:
 
 
 def test_repository_processing_aggregates_xg_and_preserves_official_score(
-    tmp_path: Path,
-) -> None:
+    tmp_path,
+):
     matches_file = tmp_path / "processed" / "matches.parquet"
     manifest_file = tmp_path / "processed" / "manifest.json"
 
@@ -73,7 +71,7 @@ def test_repository_processing_aggregates_xg_and_preserves_official_score(
     assert bool(first["eligible_for_model"])
 
 
-def test_missing_shot_xg_is_not_silently_treated_as_zero(tmp_path: Path) -> None:
+def test_missing_shot_xg_is_not_silently_treated_as_zero(tmp_path):
     matches_file = tmp_path / "matches.parquet"
     manifest_file = tmp_path / "manifest.json"
     process_repository(
@@ -90,7 +88,7 @@ def test_missing_shot_xg_is_not_silently_treated_as_zero(tmp_path: Path) -> None
     assert pd.isna(second["away_xg"])
 
 
-def test_extra_time_match_is_rejected_and_reported(tmp_path: Path) -> None:
+def test_extra_time_match_is_rejected_and_reported(tmp_path):
     matches_file = tmp_path / "matches.parquet"
     manifest_file = tmp_path / "manifest.json"
     process_repository(
@@ -105,7 +103,7 @@ def test_extra_time_match_is_rejected_and_reported(tmp_path: Path) -> None:
     assert manifest["rejection_reasons"] == {"contains non-regulation periods: [3]": 1}
 
 
-def test_validation_rejects_duplicate_match_ids(tmp_path: Path) -> None:
+def test_validation_rejects_duplicate_match_ids(tmp_path):
     matches_file = tmp_path / "matches.parquet"
     manifest_file = tmp_path / "manifest.json"
     process_repository(
@@ -121,7 +119,7 @@ def test_validation_rejects_duplicate_match_ids(tmp_path: Path) -> None:
         validate_matches(duplicated)
 
 
-def test_manifest_is_valid_json_and_records_provenance(tmp_path: Path) -> None:
+def test_manifest_is_valid_json_and_records_provenance(tmp_path):
     matches_file = tmp_path / "matches.parquet"
     manifest_file = tmp_path / "manifest.json"
     process_repository(
@@ -157,8 +155,8 @@ def test_manifest_is_valid_json_and_records_provenance(tmp_path: Path) -> None:
 
 
 def test_sync_downloads_selected_files_and_reuses_unchanged_snapshot(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+    tmp_path, monkeypatch
+):
     destination = tmp_path / "statsbomb-open-data"
     competitions = [
         {
@@ -173,7 +171,7 @@ def test_sync_downloads_selected_files_and_reuses_unchanged_snapshot(
     matches = [{"match_id": 1001}]
     events = [{"id": "event-1", "period": 1}]
 
-    def fake_download(url: str, path: Path):
+    def fake_download(url, path):
         if url.endswith("competitions.json"):
             data = competitions
         elif "/matches/2/27.json" in url:

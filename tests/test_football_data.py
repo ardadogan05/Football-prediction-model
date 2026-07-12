@@ -1,9 +1,5 @@
-from __future__ import annotations
-
 import json
-from pathlib import Path
 from urllib.error import HTTPError
-from urllib.request import Request
 
 import pandas as pd
 import pytest
@@ -22,7 +18,7 @@ from football_prediction.data.football_data import (
 )
 
 
-def example_payload() -> dict:
+def example_payload():
     return {
         "competition": {"id": 2021, "name": "Premier League", "code": "PL"},
         "matches": [
@@ -52,23 +48,23 @@ def example_payload() -> dict:
 
 
 class FakeResponse:
-    def __init__(self, payload: dict, headers: dict[str, str] | None = None) -> None:
+    def __init__(self, payload, headers=None):
         self.payload = payload
         self.headers = headers or {}
 
-    def __enter__(self) -> "FakeResponse":
+    def __enter__(self):
         return self
 
-    def __exit__(self, *args) -> None:
+    def __exit__(self, *args):
         return None
 
-    def read(self) -> bytes:
+    def read(self):
         return json.dumps(self.payload).encode("utf-8")
 
 
 def test_api_key_prefers_environment_and_falls_back_to_dotenv(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+    tmp_path, monkeypatch
+):
     (tmp_path / ".env").write_text(
         'FOOTBALL_DATA_API_KEY="dotenv-secret"\n', encoding="utf-8"
     )
@@ -81,8 +77,8 @@ def test_api_key_prefers_environment_and_falls_back_to_dotenv(
 
 
 def test_rate_limit_headers_sleep_only_when_nearly_exhausted(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+    monkeypatch,
+):
     sleeps = []
     monkeypatch.setattr(football_data_module.time, "sleep", sleeps.append)
 
@@ -103,15 +99,15 @@ def test_rate_limit_headers_sleep_only_when_nearly_exhausted(
 
 
 def test_download_normalizes_finished_matches_and_reuses_raw_cache(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
     paths = ProjectPaths.from_root(tmp_path)
-    requests: list[Request] = []
+    requests = []
     secret = "not-for-output"
 
-    def fake_urlopen(request: Request, timeout: int) -> FakeResponse:
+    def fake_urlopen(request, timeout):
         assert timeout == 60
         requests.append(request)
         return FakeResponse(example_payload(), {"X-RequestsAvailable": "2"})
@@ -190,16 +186,16 @@ def test_download_normalizes_finished_matches_and_reuses_raw_cache(
 
 
 def test_http_429_waits_for_reset_then_retries(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
     paths = ProjectPaths.from_root(tmp_path)
     secret = "retry-secret"
     attempts = []
     sleeps = []
 
-    def fake_urlopen(request: Request, timeout: int) -> FakeResponse:
+    def fake_urlopen(request, timeout):
         attempts.append(request)
         if len(attempts) == 1:
             raise HTTPError(
@@ -231,8 +227,8 @@ def test_http_429_waits_for_reset_then_retries(
 
 
 def test_invalid_refresh_preserves_existing_cache_and_processed_output(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+    tmp_path, monkeypatch
+):
     paths = ProjectPaths.from_root(tmp_path)
     monkeypatch.setenv("FOOTBALL_DATA_API_KEY", "test-secret")
     monkeypatch.setattr(
@@ -268,26 +264,26 @@ def test_invalid_refresh_preserves_existing_cache_and_processed_output(
     assert paths.football_data_manifest_file.read_bytes() == manifest_before
 
 
-@pytest.mark.parametrize(
-    ("identity", "message"),
-    [("competition", "competition code"), ("season", "season start year")],
-)
-def test_payload_identity_must_match_requested_code_and_season(
-    identity: str, message: str
-) -> None:
-    payload = example_payload()
-    if identity == "competition":
-        payload["competition"]["code"] = "PD"
-    else:
-        payload["matches"][0]["season"]["startDate"] = "2023-08-16"
+def test_payload_identity_must_match_requested_code_and_season():
+    invalid_cases = [
+        ("competition", "competition code"),
+        ("season", "season start year"),
+    ]
 
-    with pytest.raises(FootballDataError, match=message):
-        football_data_module._normalize_payload(payload, "PL", 2024)
+    for identity, message in invalid_cases:
+        payload = example_payload()
+        if identity == "competition":
+            payload["competition"]["code"] = "PD"
+        else:
+            payload["matches"][0]["season"]["startDate"] = "2023-08-16"
+
+        with pytest.raises(FootballDataError, match=message):
+            football_data_module._normalize_payload(payload, "PL", 2024)
 
 
 def test_empty_refresh_does_not_replace_processed_output(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+    tmp_path, monkeypatch
+):
     paths = ProjectPaths.from_root(tmp_path)
     monkeypatch.setenv("FOOTBALL_DATA_API_KEY", "test-secret")
     monkeypatch.setattr(
@@ -321,7 +317,7 @@ def test_empty_refresh_does_not_replace_processed_output(
     assert paths.football_data_manifest_file.read_bytes() == manifest_before
 
 
-def test_loader_rejects_invalid_processed_rows(tmp_path: Path) -> None:
+def test_loader_rejects_invalid_processed_rows(tmp_path):
     records, _ = football_data_module._normalize_payload(example_payload(), "PL", 2024)
     valid = pd.DataFrame.from_records(records, columns=FOOTBALL_DATA_COLUMNS)
     invalid_frames = []
@@ -347,7 +343,7 @@ def test_loader_rejects_invalid_processed_rows(tmp_path: Path) -> None:
             load_football_matches(output)
 
 
-def test_load_football_matches_rejects_an_incomplete_schema(tmp_path: Path) -> None:
+def test_load_football_matches_rejects_an_incomplete_schema(tmp_path):
     matches_file = tmp_path / "football_data_matches.parquet"
     pd.DataFrame([{"source": "football_data"}]).to_parquet(
         matches_file, index=False
@@ -357,7 +353,7 @@ def test_load_football_matches_rejects_an_incomplete_schema(tmp_path: Path) -> N
         load_football_matches(matches_file)
 
 
-def test_defaults_and_competition_mapping_match_project_contract(tmp_path: Path) -> None:
+def test_defaults_and_competition_mapping_match_project_contract(tmp_path):
     paths = ProjectPaths.from_root(tmp_path)
 
     assert DEFAULT_COMPETITION_CODES == ("PL", "BL1", "FL1", "SA", "PD")

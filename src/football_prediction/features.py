@@ -35,9 +35,9 @@ OUTPUT_COLUMNS = [
     "away_team_name",
     "home_goals",
     "away_goals",
-    *FEATURE_COLUMNS,
-    "feature_supported",
 ]
+OUTPUT_COLUMNS.extend(FEATURE_COLUMNS)
+OUTPUT_COLUMNS.append("feature_supported")
 
 
 def average(values, fallback):

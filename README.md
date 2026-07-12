@@ -9,9 +9,6 @@ The rebuild uses two data sources:
 - StatsBomb Open Data supplies the older training matches.
 - football-data.org supplies recent results for validation and final testing.
 
-The earlier FBRef, Brave Search, hand-adjusted lambda, and desktop GUI files are
-still in the repository for reference. They are not part of the rebuilt model.
-
 ## Current progress
 
 Phase 1 and the modelling work in Phase 2 are complete.
