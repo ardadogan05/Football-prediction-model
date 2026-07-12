@@ -16,6 +16,7 @@ def test_both_models_fit_and_predictions_are_positive_and_deterministic():
     training, _ = training_and_recent_matches()
     features = supported_rows(build_features(training, rolling_window=3))
 
+    #Fitting twice with identical input should give identical expected goals.
     first = fit_poisson_models(features, alpha=0.1)
     second = fit_poisson_models(features, alpha=0.1)
     first_home, first_away = predict_goals(first, features)
@@ -34,6 +35,7 @@ def test_competition_encoder_contains_all_five_leagues():
     features = supported_rows(build_features(training, rolling_window=3))
     model = fit_poisson_models(features, alpha=0.1)
 
+    #Look inside the pipeline to check that no supported league was left out.
     preparation = model["home_model"].named_steps["prepare"]
     encoder = preparation.named_transformers_["competition"]
     encoded_competitions = set(encoder.categories_[0])
@@ -50,6 +52,7 @@ def test_tuning_records_every_window_and_alpha_configuration():
         alphas=(0.01, 0.1),
     )
 
+    #Two windows times two alpha values should create four combinations.
     configurations = set()
     for row in result["results"].itertuples(index=False):
         configurations.add((row.rolling_window, row.alpha))
@@ -59,6 +62,7 @@ def test_tuning_records_every_window_and_alpha_configuration():
 def test_final_test_goals_cannot_change_tuning_selection():
     training, recent = training_and_recent_matches()
     changed = recent.copy()
+    #Even impossible test scores must not affect which settings are selected.
     changed.loc[
         changed["season_name"] == "2025/2026", ["home_goals", "away_goals"]
     ] = 99
@@ -83,6 +87,7 @@ def test_training_validation_and_test_periods_are_chronological():
     validation = recent.loc[recent["season_name"] == "2024/2025"]
     test = result["test_features"]
 
+    #Each period must finish before the next one begins.
     assert training["match_date"].max() < validation["match_date"].min()
     assert validation["match_date"].max() < test["match_date"].min()
 
@@ -94,5 +99,6 @@ def test_unsupported_rows_are_not_predicted():
     model = fit_poisson_models(supported, alpha=0.1)
     unsupported = features.loc[~features["feature_supported"]].iloc[[0]]
 
+    #The model should fail clearly instead of guessing with missing history.
     with pytest.raises(ValueError, match="enough previous matches"):
         predict_goals(model, unsupported)

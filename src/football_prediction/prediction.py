@@ -11,6 +11,7 @@ from football_prediction.probabilities import calculate_probabilities
 
 
 def save_model(model_bundle, path):
+    #Joblib stores both fitted sklearn pipelines and the selected settings.
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model_bundle, path)
@@ -24,6 +25,7 @@ def load_model(path):
 
 
 def team_goal_history(matches, team_name):
+    #Store goals from the team's point of view, regardless of venue.
     goals_for = []
     goals_against = []
     for match in matches.itertuples(index=False):
@@ -42,6 +44,7 @@ def predict_match(home_team, away_team, competition, matches, model_bundle):
 
     data = matches.copy()
     data["match_date"] = pd.to_datetime(data["match_date"])
+    #Only matches from the requested league should describe these teams.
     competition_matches = data.loc[data["competition_name"] == competition].copy()
     competition_matches = competition_matches.sort_values(["match_date", "match_id"])
     if competition_matches.empty:
@@ -54,21 +57,25 @@ def predict_match(home_team, away_team, competition, matches, model_bundle):
     if competition_id not in model_bundle["competitions"]:
         raise ValueError("The saved model does not support this competition")
 
+    #A team can first appear in either the home or away column.
     known_teams = set(competition_matches["home_team_name"])
     known_teams.update(competition_matches["away_team_name"])
     if home_team not in known_teams or away_team not in known_teams:
         raise ValueError("Both teams need earlier matches in this competition")
 
+    #The last dated match tells us which season is currently active.
     latest_season = competition_matches.iloc[-1]["season_name"]
     season_matches = competition_matches.loc[
         competition_matches["season_name"] == latest_season
     ]
+    #All matches are used for rolling form, including the end of last season.
     home_all_for, home_all_against = team_goal_history(
         competition_matches, home_team
     )
     away_all_for, away_all_against = team_goal_history(
         competition_matches, away_team
     )
+    #Season form is calculated separately so it resets at the season boundary.
     home_season_for, home_season_against = team_goal_history(
         season_matches, home_team
     )
@@ -82,6 +89,7 @@ def predict_match(home_team, away_team, competition, matches, model_bundle):
     ):
         raise ValueError("Both teams need at least 3 previous matches this season")
 
+    #Use the window that achieved the best validation result during tuning.
     window = model_bundle["rolling_window"]
     feature_values = {
         "home_rolling_goals_for": sum(home_all_for[-window:]) / len(home_all_for[-window:]),
@@ -100,6 +108,7 @@ def predict_match(home_team, away_team, competition, matches, model_bundle):
         "feature_supported": True,
     }
 
+    #The saved sklearn model expects one table row, even for one fixture.
     feature_row = pd.DataFrame([feature_values])
     home_lambdas, away_lambdas = predict_goals(model_bundle, feature_row)
     probabilities = calculate_probabilities(home_lambdas[0], away_lambdas[0])

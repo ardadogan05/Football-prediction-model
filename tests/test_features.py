@@ -5,6 +5,7 @@ from football_prediction.features import FEATURE_COLUMNS, build_features
 
 
 def example_matches():
+    #A small repeating league is enough to build several matches of history.
     matches = []
     for index in range(16):
         home_id = (index % 4) + 1
@@ -34,6 +35,7 @@ def test_current_and_future_goals_do_not_change_current_features():
     matches = example_matches()
     original = build_features(matches, rolling_window=3)
 
+    #Changing match 9 and later must not change features made for match 9 or earlier.
     changed_matches = matches.copy()
     changed_matches.loc[changed_matches["match_id"] >= 9, ["home_goals", "away_goals"]] = 99
     changed = build_features(changed_matches, rolling_window=3)
@@ -53,6 +55,7 @@ def test_same_date_matches_do_not_leak_into_each_other():
     ].iloc[0]
     original = build_features(matches, rolling_window=3)
 
+    #Match 10 is on the same date, so it must not know match 9's changed score.
     changed_matches = matches.copy()
     changed_matches.loc[changed_matches["match_id"] == 9, ["home_goals", "away_goals"]] = 99
     changed = build_features(changed_matches, rolling_window=3)
@@ -76,6 +79,7 @@ def test_rolling_features_use_only_the_requested_window():
         elif match.away_team_id == team_id:
             goals_for.append(match.away_goals)
 
+    #Only the last two earlier results should be part of this average.
     expected = sum(goals_for[-2:]) / 2
     assert target["home_rolling_goals_for"] == pytest.approx(expected)
 
@@ -87,6 +91,7 @@ def test_season_statistics_reset_for_a_new_season():
     features = build_features(matches, rolling_window=3)
     season_opener = features.loc[features["match_id"] == 13].iloc[0]
 
+    #Overall history remains, but current-season history starts from zero.
     assert season_opener["home_history_matches"] > 0
     assert season_opener["away_history_matches"] > 0
     assert season_opener["home_season_matches"] == 0
@@ -102,6 +107,7 @@ def test_rows_need_three_previous_matches_for_both_teams():
     ]
     supported = features.loc[features["feature_supported"]]
 
+    #A match is usable only when both teams have enough earlier information.
     assert not early["feature_supported"].any()
     assert not supported.empty
     assert (supported["home_season_matches"] >= 3).all()

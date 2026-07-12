@@ -46,12 +46,14 @@ OUTPUT_COLUMNS.append("feature_supported")
 
 
 def average(values):
+    #There is no meaningful average before a team has played a match.
     if not values:
         return math.nan
     return sum(values) / len(values)
 
 
 def season_average(totals, key):
+    #The dictionary stores both the total goals and number of matches.
     values = totals.get(key)
     if values is None or values["matches"] == 0:
         return math.nan
@@ -66,6 +68,7 @@ def season_matches(totals, key):
 
 
 def add_season_goals(totals, key, goals):
+    #Create a team's season record the first time the team appears.
     if key not in totals:
         totals[key] = {"total": 0.0, "matches": 0}
     totals[key]["total"] += goals
@@ -101,6 +104,7 @@ def build_features(matches, rolling_window=5, minimum_history=MINIMUM_HISTORY):
     if "source" not in data.columns:
         data["source"] = "statsbomb"
     data["match_date"] = pd.to_datetime(data["match_date"])
+    #Sorting makes sure the history is built from oldest match to newest match.
     data = data.sort_values(["match_date", "match_id"]).reset_index(drop=True)
 
     # Each dictionary contains results from earlier dates only.
@@ -127,6 +131,7 @@ def build_features(matches, rolling_window=5, minimum_history=MINIMUM_HISTORY):
             home_history = team_histories.get(home_key, {"for": [], "against": []})
             away_history = team_histories.get(away_key, {"for": [], "against": []})
 
+            #Season averages reset each season, while rolling form can cross seasons.
             home_season_key = (source, competition_id, season_id, home_id)
             away_season_key = (source, competition_id, season_id, away_id)
             home_season_matches = season_matches(season_goals_for, home_season_key)
@@ -146,6 +151,7 @@ def build_features(matches, rolling_window=5, minimum_history=MINIMUM_HISTORY):
                 "away_team_name": match.away_team_name,
                 "home_goals": int(match.home_goals),
                 "away_goals": int(match.away_goals),
+                #Only the chosen number of most recent matches represents current form.
                 "home_rolling_goals_for": average(
                     home_history["for"][-rolling_window:]
                 ),
@@ -158,6 +164,7 @@ def build_features(matches, rolling_window=5, minimum_history=MINIMUM_HISTORY):
                 "away_rolling_goals_against": average(
                     away_history["against"][-rolling_window:]
                 ),
+                #Season features use every earlier match from the current season.
                 "home_season_goals_for": season_average(
                     season_goals_for, home_season_key
                 ),
@@ -201,6 +208,7 @@ def build_features(matches, rolling_window=5, minimum_history=MINIMUM_HISTORY):
             if away_key not in team_histories:
                 team_histories[away_key] = {"for": [], "against": []}
 
+            #For means goals scored and against means goals conceded.
             team_histories[home_key]["for"].append(home_goals)
             team_histories[home_key]["against"].append(away_goals)
             team_histories[away_key]["for"].append(away_goals)
