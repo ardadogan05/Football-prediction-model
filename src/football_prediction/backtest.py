@@ -33,6 +33,7 @@ PREDICTION_COLUMNS = [
 
 
 def match_result(home_value, away_value):
+    #This works for both actual goals and predicted goal values.
     if home_value > away_value:
         return "home"
     if home_value == away_value:
@@ -90,6 +91,7 @@ def make_prediction_rows(features, home_lambdas, away_lambdas, model_name):
             probabilities["draw"],
             probabilities["away_win"],
         ]
+        #The final 1X2 prediction is whichever total probability is largest.
         predicted = ["home", "draw", "away"][int(np.argmax(result_probabilities))]
 
         rows.append(
@@ -120,6 +122,7 @@ def calculate_metrics(predictions):
     if predictions.empty:
         raise ValueError("Cannot calculate metrics without predictions")
 
+    #Lower log loss and Brier score both mean better probability estimates.
     log_losses = []
     brier_scores = []
     for row in predictions.itertuples(index=False):
@@ -128,9 +131,11 @@ def calculate_metrics(predictions):
             "draw": row.draw_probability,
             "away": row.away_probability,
         }
+        #Log loss only reads the probability given to the result that happened.
         actual_probability = probabilities[row.actual_result]
         log_losses.append(-math.log(max(actual_probability, 1e-15)))
 
+        #Brier score compares all three probabilities with the actual outcome.
         squared_errors = 0.0
         for result in ["home", "draw", "away"]:
             actual_value = 1.0 if row.actual_result == result else 0.0
@@ -139,6 +144,7 @@ def calculate_metrics(predictions):
 
     home_error = np.abs(predictions["home_goals"] - predictions["lambda_home"])
     away_error = np.abs(predictions["away_goals"] - predictions["lambda_away"])
+    #Accuracy ignores probability size and checks only the final 1X2 choice.
     accuracy = np.mean(predictions["predicted_result"] == predictions["actual_result"])
 
     return {
@@ -169,6 +175,7 @@ def run_backtest(model_bundle, recent_matches, test_season="2025/2026"):
         test_features, home_lambdas, away_lambdas, "fitted_model"
     )
 
+    #The simple baseline shows whether fitting the model was actually worthwhile.
     baseline = competition_average_baseline(recent_matches)
     test_with_baseline = test_features.merge(baseline, on="match_id", how="left")
     baseline_home = test_with_baseline["baseline_lambda_home"].to_numpy(dtype=float)
@@ -182,6 +189,7 @@ def run_backtest(model_bundle, recent_matches, test_season="2025/2026"):
     if set(model_predictions["match_id"]) != set(baseline_predictions["match_id"]):
         raise ValueError("The fitted model and baseline must use identical matches")
 
+    #Both prediction sets are saved together so they can be compared match by match.
     predictions = pd.concat(
         [model_predictions, baseline_predictions], ignore_index=True
     )

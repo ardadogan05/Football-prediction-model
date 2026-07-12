@@ -14,12 +14,15 @@ from football_prediction.probabilities import calculate_probabilities
 
 
 MODEL_COLUMNS = FEATURE_COLUMNS + ["competition_id"]
+#These IDs are the top five leagues in the processed StatsBomb data.
 SUPPORTED_COMPETITIONS = [2, 7, 9, 11, 12]
+#A small grid is enough to compare short, medium and longer recent form.
 DEFAULT_WINDOWS = (3, 5, 8)
 DEFAULT_ALPHAS = (0.01, 0.1, 1.0)
 
 
 def check_rows(features, need_goals):
+    #Training needs the final scores, but a future prediction obviously does not.
     required = set(MODEL_COLUMNS)
     if need_goals:
         required.update(["home_goals", "away_goals"])
@@ -71,6 +74,7 @@ def make_poisson_pipeline(alpha):
 
 
 def supported_rows(features):
+    #Unsupported rows are normally early-season matches without enough history.
     if "feature_supported" not in features.columns:
         return features.copy()
     return features.loc[features["feature_supported"].fillna(False)].copy()
@@ -85,8 +89,10 @@ def fit_poisson_models(features, alpha=0.1):
         raise ValueError("No supported feature rows are available for fitting")
     check_rows(training, need_goals=True)
 
+    #Separate models allow home and away scoring to behave differently.
     home_model = make_poisson_pipeline(alpha)
     away_model = make_poisson_pipeline(alpha)
+    #The target is goals scored, not the final home/draw/away result.
     home_model.fit(training[MODEL_COLUMNS], training["home_goals"])
     away_model.fit(training[MODEL_COLUMNS], training["away_goals"])
 
@@ -104,6 +110,7 @@ def predict_goals(model_bundle, features):
         raise ValueError("Cannot predict rows without enough previous matches")
     check_rows(prediction_rows, need_goals=False)
 
+    #Each output is an expected number of goals, also called a Poisson lambda.
     home = model_bundle["home_model"].predict(prediction_rows[MODEL_COLUMNS])
     away = model_bundle["away_model"].predict(prediction_rows[MODEL_COLUMNS])
     if not np.isfinite(home).all() or not np.isfinite(away).all():
@@ -127,6 +134,7 @@ def validation_log_loss(features, home_lambdas, away_lambdas):
             actual_probability = probabilities["draw"]
         else:
             actual_probability = probabilities["away_win"]
+        #A confident wrong probability receives a much larger penalty.
         losses.append(-math.log(max(actual_probability, 1e-15)))
 
     return float(np.mean(losses))
@@ -147,6 +155,7 @@ def tune_poisson_models(
     tuning_rows = []
     best = None
 
+    #Try every rolling-window size before comparing regularization values.
     for window in rolling_windows:
         training_features = supported_rows(
             build_features(training_matches, rolling_window=window)
@@ -170,6 +179,7 @@ def tune_poisson_models(
         if validation["match_date"].max() >= test["match_date"].min():
             raise ValueError("Validation matches must end before testing starts")
 
+        #The lowest validation log loss decides which settings are kept.
         for alpha in alphas:
             model_bundle = fit_poisson_models(training_features, alpha=alpha)
             home_lambdas, away_lambdas = predict_goals(model_bundle, validation)
@@ -202,6 +212,7 @@ def tune_poisson_models(
     final_model = fit_poisson_models(final_training, alpha=best["alpha"])
     final_model.update(
         {
+            #These values are saved so future predictions use the same setup.
             "rolling_window": best["window"],
             "training_end": final_training["match_date"].max().date().isoformat(),
             "competitions": SUPPORTED_COMPETITIONS.copy(),

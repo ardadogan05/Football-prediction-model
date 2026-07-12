@@ -16,6 +16,7 @@ from helpers import training_and_recent_matches
 
 
 def fitted_model_and_recent_matches():
+    #A single model setting is enough because these tests focus on backtesting.
     training, recent = training_and_recent_matches()
     tuning = tune_poisson_models(
         training, recent, rolling_windows=(3,), alphas=(0.1,)
@@ -28,6 +29,7 @@ def test_fitted_model_and_baseline_use_identical_matches_and_columns():
     result = run_backtest(model, recent)
     predictions = result["predictions"]
 
+    #A fair comparison requires both methods to predict exactly the same fixtures.
     model_rows = predictions.loc[predictions["model_name"] == "fitted_model"]
     baseline_rows = predictions.loc[
         predictions["model_name"] == "competition_average"
@@ -42,6 +44,7 @@ def test_baseline_does_not_use_the_current_match_result():
     changed = recent.copy()
     target_index = changed.index[-1]
     target_match_id = changed.loc[target_index, "match_id"]
+    #Changing the target score should not change its already-made prediction.
     changed.loc[target_index, ["home_goals", "away_goals"]] = 99
     mutated = competition_average_baseline(changed)
 
@@ -52,6 +55,7 @@ def test_baseline_does_not_use_the_current_match_result():
 
 
 def test_metric_calculations_on_hand_written_predictions():
+    #Two simple rows make every expected metric possible to calculate by hand.
     predictions = pd.DataFrame(
         [
             {
@@ -110,5 +114,6 @@ def test_backtest_artifacts_are_saved_only_once(tmp_path):
     assert "fitted_model" in saved_metrics
     assert "competition_average_baseline" in saved_metrics
 
+    #Refusing to overwrite keeps the original test result reproducible.
     with pytest.raises(FileExistsError, match="already exist"):
         save_backtest(result, predictions_path, metrics_path)
