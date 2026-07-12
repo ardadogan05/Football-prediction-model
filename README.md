@@ -1,77 +1,174 @@
 # Football Match Prediction Model
 
-*README based on a summary of my audio notes while building this project. Provided by OpenAI's ChatGPT 5*
+This project predicts football results with two fitted Poisson regression models:
+one for home goals and one for away goals. It currently covers the Premier League,
+Bundesliga, Ligue 1, Serie A, and La Liga.
 
-## Overview
+The rebuild uses two data sources:
 
-This project predicts the outcome of football matches between teams in the top 5 European leagues (as defined by Opta Aug. 2025) using **expected goals (xG)** data from FBRef. It scrapes data through the Brave Search API, runs thousands of Poisson-based simulations, and outputs win/draw/loss probabilities.
+- StatsBomb Open Data supplies the older training matches.
+- football-data.org supplies recent results for validation and final testing.
 
-The goal was to get predictions close to bookmaker odds, since they have extremely advanced models, while still building my own lambda calculation. I can’t fully calibrate it to actual results, so the lambda values are based on my own reasoning, not perfect, but fine for this project. The idea to ground the model in the betting odds came after realizing that I couldn't calibrate it.
+The earlier FBRef, Brave Search, hand-adjusted lambda, and desktop GUI files are
+still in the repository for reference. They are not part of the rebuilt model.
 
-For a more serious production build, I would store scraped data in a file (preferably JSON, but CSV is fine) so the program doesn’t waste resources scraping every time it runs. Right now, everything is freshly scraped on each run.
+## Current progress
 
----
+Phase 1 and the modelling work in Phase 2 are complete.
 
-## Key Features
+- StatsBomb: 2,169 processed matches from 27 competition-seasons, ending on
+  18 May 2024.
+- football-data.org: 3,501 finished regular-time matches from the 2024/25 and
+  2025/26 seasons, ending on 24 May 2026.
+- All five leagues are included.
+- The best validation settings are an 8-match rolling window and `alpha=0.1`.
+- Validation 1X2 log loss is `1.0274`.
+- The 1,751 supported matches in 2025/26 remain separate from model selection.
 
-The model includes dynamic home and away advantage factors based on real xG over and underperformance, fuzzy matching to handle typos and inconsistent team names, exception handling for missing or outdated data, league strength coefficients for cross-league matchups based on Opta’s rankings, and a modern GUI with logos and proper data credits.
+That last season has not been scored yet. Its one-time comparison against a simple
+baseline belongs to Phase 3.
 
-By using Brave Search API, the code allows a variety of different names for teams. The API searches on FBref using the given input and allows them to find the full/proper name for the club, thus making it easier for me.
+## Why the model now uses goals instead of xG
 
----
+StatsBomb provides xG, but football-data.org provides results without xG. A single
+xG feature model therefore cannot use both sources fairly.
 
-## How It Works
+Both sources do provide final goals. The shared model now builds the same goal-form
+features from both sources. StatsBomb xG is still retained in its processed data,
+so it can be used in a separate experiment later.
 
-The model uses a **Poisson distribution**, where the mean equals the variance, to simulate goals scored. This works well for most games, but underestimates extreme scorelines.
+## How the modelling works
 
-Lambda values, representing the average xG per team per match, are based on a weighted mix of season averages and other factors. This approach is inspired by Lee & Smith (2002), who showed that performance tends to **regress to the mean**, making season averages more predictive than short-term form.
+For every match, the feature builder looks only at matches from earlier dates. It
+calculates:
 
----
+- recent goals scored and conceded by both teams;
+- season-to-date goals scored and conceded by both teams;
+- the number of earlier matches behind each average;
+- the competition in which the match was played.
 
-## Limitations
+If a team has no earlier match, the code uses the league's earlier goal average.
+If the league also has no earlier match, that row is marked unsupported. All games
+on one date are calculated before that date updates the histories, which prevents
+same-day leakage.
 
-The model currently uses data from 2024-2025, as the 2025-2026 season is yet to begin (as of August 15th, 2025). Therefore, the model will not be able to predict any games until at least 6 games have been played, and will get more accurate as more games are played.
+Team IDs are kept separate for each provider. The code does not try to guess that
+a StatsBomb team ID and a football-data.org team ID are the same club.
 
-The model uses subjective lambda values with no calibration to actual results, does not account for public-perception bias in bookmaker odds, uses xG data from all competitions (which can inflate stats for Europa League or Conference League teams compared to Champions League sides), does not generate predictions for newly promoted teams until they have played at least six matches in all competitions, and has some messy variable names such as `team1Name` and `team2-name`. The model does not take player injuries into account. This means that if an important player is to get hurt, e.g., Rodri for Manchester City last year, the drop in team performance will be visible after it is shown in the decrease in xG and/or increase in xGa. The inverse also applies; new signings late in the transfer window, or in January, will not directly affect the model.
+The data roles are explicit:
 
-Fbref does ban IP addresses that send too many requests, therefore be wary: 
-- Max 10 requests/min to FBref & Stathead
-- Max 20 requests/min to other sites
-- Violations result in a 1-day IP block
+1. Fit candidate models on the 2,169 StatsBomb matches.
+2. Choose the rolling window and regularization using football-data.org 2024/25.
+3. Refit the chosen model on StatsBomb plus 2024/25.
+4. Keep football-data.org 2025/26 for the final test.
 
----
+Earlier results within the final season may update the form used for later matches.
+This copies how predictions would work week by week, while the fitted model and its
+settings remain frozen.
 
-## Models Considered (Not Implemented)
+The two regressions produce `lambda_home` and `lambda_away`: the model's expected
+number of goals for each team. The regression is written directly with NumPy and
+SciPy. NumPy builds the input matrix and evaluates the Poisson formula, while
+`scipy.optimize.minimize` finds the weights that give the smallest loss. There is
+no scikit-learn pipeline hidden behind the fitting step.
 
-I considered a Negative Binomial model, which handles rare high scores better, but decided the complexity outweighed the benefit for this xG-based approach. I also looked at a Bivariate Poisson model, which accounts for correlation between teams’ scoring, but it requires more data and is harder to implement. Both could be explored in future versions to improve scoreline realism.
+The probability code calculates every scoreline probability from the two Poisson
+distributions. Adding the relevant score cells gives home-win, draw, and away-win
+probabilities. The largest cell is the most likely scoreline.
 
----
+There are no hand-written favourite boosts or adjustments after prediction.
 
-## Development Notes
+## Setup
 
-The project began by scraping FBRef, but I ran into dynamic URL issues with team IDs. I tried using Gemini AI for ID lookup and typo handling, but replaced it with the Brave Search API to avoid hallucinations. I fixed inconsistent FBRef team names using fuzzy matching, refactored the code to avoid circular imports for the GUI, added a boost to the lambda values of favorites after noticing underdogs and draws were being overvalued, and realized that the biggest challenge wasn’t the statistical modeling but making the scraping reliable, handling edge cases, and keeping the program user-friendly.
+Python 3.10 or newer is required.
 
----
+```bash
+python -m pip install -e ".[dev]"
+```
 
-## Reference
+Create an ignored `.env` file in the project root for football-data.org:
 
-Lee, M., & Smith, G. (2002). Regression to the mean and football wagers. *Journal of Behavioral Decision Making*, 15, 329–342. [https://doi.org/10.1002/BDM.418](https://doi.org/10.1002/BDM.418)
+```text
+FOOTBALL_DATA_API_KEY=your_own_token
+```
 
----
+Never commit this file or paste the token into source code.
 
-## Known glitches
+## Commands you can run
 
-I have tried this code on 3 different machines, and have encountered a glitch where the probability bar ends up in a random place in the GUI instead of under the output box. There seems to be an issue when using customTkinter and Tkinter on some devices. The easiest solution is to remove the probability bar, as it is purely visual.
+Download or refresh StatsBomb data:
 
-**Note (17.09.2025):** The website is currently unavailable (403 error), meaning that stats cannot be scraped and used. This seems to be related to Cloudflare restrictions, and I’ll be working on a proper fix once I have more time. 
+```bash
+python -m football_prediction.cli update-data
+```
 
+Download the two recent football-data.org seasons:
 
----
+```bash
+python -m football_prediction.cli update-football-data --seasons 2024 2025
+```
 
-## Try the code yourself!
-As I have been advised against sharing my API key for Brave Search API with you, you will need to create one yourself. It is free of charge and can be done at [https://brave.com/search/api/](https://brave.com/search/api/). You will need to do the following:
+The downloaded JSON is cached. Running the same command again processes the local
+cache without making repeat API calls unless `--refresh` is added.
 
-* Clone the repository
-* Install the required libraries by writing "pip install -r requirements.txt" in the terminal.
-* Create your own .env file with your API key (or directly write it in FBrefIDFetch.py).
-* Run the gui.py file.
+Inspect both data summaries:
+
+```bash
+python -m football_prediction.cli data-status
+python -m football_prediction.cli football-data-status
+```
+
+Run the real Phase 2 tuning workflow:
+
+```bash
+python -m football_prediction.cli tune-model
+```
+
+This prints the best settings, all nine validation results, and the dates and size
+of the untouched final-test period. It does not report final-test performance.
+
+Run all tests:
+
+```bash
+python -m pytest
+```
+
+## Main modelling files
+
+- `src/football_prediction/features.py` builds leakage-safe pre-match features.
+- `src/football_prediction/model.py` fits and tunes the two Poisson regressions
+  using ordinary functions, NumPy arrays, SciPy, loops, and dictionaries.
+- `src/football_prediction/probabilities.py` converts expected goals into exact
+  score and 1X2 probabilities.
+- `src/football_prediction/data/football_data.py` handles the recent API data.
+- `src/football_prediction/cli.py` contains the commands shown above.
+
+The model and probability functions return dictionaries. This keeps intermediate
+values visible and makes them easy to inspect, for example:
+
+```python
+from football_prediction.model import fit_poisson_models, predict_goals
+from football_prediction.probabilities import calculate_probabilities
+
+model = fit_poisson_models(training_features, alpha=0.1)
+home_lambdas, away_lambdas = predict_goals(model, new_features)
+probabilities = calculate_probabilities(home_lambdas[0], away_lambdas[0])
+print(probabilities["home_win"])
+```
+
+Pandas remains because the extracted matches naturally form a labelled table.
+The actual mathematics uses NumPy, SciPy, and Python's `math` module.
+
+## Current limitations
+
+- Goals are noisier than xG and may react more slowly to changes in performance.
+- Home and away goal counts are treated as independent Poisson variables.
+- Injuries, line-ups, transfers, and red-card information are not model features.
+- StatsBomb coverage is uneven across leagues and seasons.
+- Clubs are not matched across the two providers; only the learned model
+  coefficients and competition categories are shared.
+- Final test metrics, a competition-average baseline, saved model artifacts, and
+  the new interface are later phases.
+
+Data sources: [StatsBomb Open Data](https://github.com/statsbomb/open-data) and
+[football-data.org](https://www.football-data.org/).

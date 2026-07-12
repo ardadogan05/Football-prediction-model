@@ -34,13 +34,16 @@ def is_top_five_mens_league(record: dict) -> bool:
 
 @dataclass(frozen=True)
 class ProjectPaths:
-    """Filesystem locations used by the Phase 1 data pipeline."""
+    """Filesystem locations used by the two data pipelines."""
 
     root: Path
     raw_repository: Path
     processed_directory: Path
     matches_file: Path
     manifest_file: Path
+    football_data_raw_directory: Path
+    football_data_matches_file: Path
+    football_data_manifest_file: Path
 
     @classmethod
     def from_root(cls, root: Path) -> "ProjectPaths":
@@ -52,4 +55,7 @@ class ProjectPaths:
             processed_directory=processed,
             matches_file=processed / "matches.parquet",
             manifest_file=processed / "manifest.json",
+            football_data_raw_directory=root / "data" / "raw" / "football-data",
+            football_data_matches_file=processed / "football_data_matches.parquet",
+            football_data_manifest_file=processed / "football_data_manifest.json",
         )

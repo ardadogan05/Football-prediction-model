@@ -1,63 +1,103 @@
-"""Turn fitted Poisson goal rates into score and result probabilities."""
+# Turn expected goals into score and match-result probabilities.
 
-from __future__ import annotations
-
-from dataclasses import dataclass
+import math
 
 import numpy as np
 from scipy.stats import poisson
 
 
-@dataclass(frozen=True)
-class MatchProbabilities:
-    lambda_home: float
-    lambda_away: float
-    home_win: float
-    draw: float
-    away_win: float
-    most_likely_score: tuple[int, int]
-    score_matrix: np.ndarray
-    captured_mass: float
+def check_probability_inputs(lambda_home, lambda_away, minimum_captured_mass):
+    lambdas_are_valid = (
+        math.isfinite(lambda_home)
+        and math.isfinite(lambda_away)
+        and lambda_home > 0
+        and lambda_away > 0
+    )
+    if not lambdas_are_valid:
+        raise ValueError("Poisson lambdas must be finite and positive")
+
+    mass_is_valid = (
+        math.isfinite(minimum_captured_mass)
+        and 0 < minimum_captured_mass < 1
+    )
+    if not mass_is_valid:
+        raise ValueError(
+            "minimum_captured_mass must be finite and strictly between 0 and 1"
+        )
+
+
+def check_score_limit(max_score, name):
+    is_integer = isinstance(max_score, (int, np.integer))
+    if isinstance(max_score, bool) or not is_integer or max_score < 1:
+        raise ValueError(f"{name} must be a positive integer")
+
+
+def required_score_cutoff(
+    lambda_home,
+    lambda_away,
+    minimum_captured_mass=0.99,
+    minimum_max_score=10,
+):
+    # Find a score limit that contains enough of both Poisson distributions.
+    check_probability_inputs(lambda_home, lambda_away, minimum_captured_mass)
+    check_score_limit(minimum_max_score, "minimum_max_score")
+
+    max_score = minimum_max_score
+    captured = poisson.cdf(max_score, lambda_home) * poisson.cdf(
+        max_score, lambda_away
+    )
+
+    while captured < minimum_captured_mass:
+        max_score += 1
+        if max_score > 100:
+            raise ValueError("Poisson lambdas are too large for a football score matrix")
+        captured = poisson.cdf(max_score, lambda_home) * poisson.cdf(
+            max_score, lambda_away
+        )
+
+    return max_score
 
 
 def calculate_probabilities(
-    lambda_home: float,
-    lambda_away: float,
-    max_score: int = 10,
-    minimum_captured_mass: float = 0.99,
-) -> MatchProbabilities:
-    """Calculate deterministic match probabilities from two Poisson means."""
-
-    if lambda_home <= 0 or lambda_away <= 0:
-        raise ValueError("Poisson lambdas must be positive")
-    if max_score < 1:
-        raise ValueError("max_score must be at least 1")
+    lambda_home,
+    lambda_away,
+    max_score=10,
+    minimum_captured_mass=0.99,
+):
+    # Calculate score, home-win, draw, and away-win probabilities.
+    check_probability_inputs(lambda_home, lambda_away, minimum_captured_mass)
+    check_score_limit(max_score, "max_score")
 
     goals = np.arange(max_score + 1)
-    home_probabilities = poisson.pmf(goals, lambda_home)
-    away_probabilities = poisson.pmf(goals, lambda_away)
-    matrix = np.outer(home_probabilities, away_probabilities)
-    captured_mass = float(matrix.sum())
+    home_goal_probabilities = poisson.pmf(goals, lambda_home)
+    away_goal_probabilities = poisson.pmf(goals, lambda_away)
+
+    # matrix[i, j] is P(home scores i) * P(away scores j).
+    matrix = np.outer(home_goal_probabilities, away_goal_probabilities)
+    captured_mass = float(np.sum(matrix))
 
     if captured_mass < minimum_captured_mass:
         raise ValueError(
             f"max_score={max_score} captures only {captured_mass:.3%} probability"
         )
 
-    #normalizing adds the very small missing tail back into the displayed matrix.
+    # A tiny tail lies outside the matrix.  Normalize the cells so the shown
+    # home/draw/away probabilities add up to exactly one.
     matrix = matrix / captured_mass
-    home_win = float(np.tril(matrix, k=-1).sum())
-    draw = float(np.trace(matrix))
-    away_win = float(np.triu(matrix, k=1).sum())
-    most_likely_index = np.unravel_index(np.argmax(matrix), matrix.shape)
+    home_win = float(np.sum(np.tril(matrix, k=-1)))
+    draw = float(np.sum(np.diag(matrix)))
+    away_win = float(np.sum(np.triu(matrix, k=1)))
 
-    return MatchProbabilities(
-        lambda_home=float(lambda_home),
-        lambda_away=float(lambda_away),
-        home_win=home_win,
-        draw=draw,
-        away_win=away_win,
-        most_likely_score=(int(most_likely_index[0]), int(most_likely_index[1])),
-        score_matrix=matrix,
-        captured_mass=captured_mass,
-    )
+    highest_cell = np.unravel_index(np.argmax(matrix), matrix.shape)
+    most_likely_score = (int(highest_cell[0]), int(highest_cell[1]))
+
+    return {
+        "lambda_home": float(lambda_home),
+        "lambda_away": float(lambda_away),
+        "home_win": home_win,
+        "draw": draw,
+        "away_win": away_win,
+        "most_likely_score": most_likely_score,
+        "score_matrix": matrix,
+        "captured_mass": captured_mass,
+    }
