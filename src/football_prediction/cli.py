@@ -1,13 +1,11 @@
-"""Command-line entry points for data updates and model tuning."""
-
-from __future__ import annotations
+"""Small command-line interface for data, training, backtesting, and prediction."""
 
 import argparse
 from dataclasses import asdict
 import json
 from pathlib import Path
-from typing import Sequence
 
+from football_prediction.backtest import run_backtest, save_backtest
 from football_prediction.config import ProjectPaths
 from football_prediction.data.football_data import (
     load_football_matches,
@@ -16,53 +14,75 @@ from football_prediction.data.football_data import (
 from football_prediction.data.loader import load_manifest, load_matches
 from football_prediction.data.process import process_repository
 from football_prediction.data.sync import sync_repository
-from football_prediction.model import tune_external_poisson_models
+from football_prediction.model import tune_poisson_models
+from football_prediction.prediction import load_model, predict_match, save_model
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="football-prediction")
-    parser.add_argument(
+def parser():
+    command_parser = argparse.ArgumentParser(prog="football-prediction")
+    command_parser.add_argument(
         "--project-root",
         type=Path,
         default=Path.cwd(),
-        help="Repository root containing the data directory",
+        help="Repository root containing data, models, and reports",
     )
-    subcommands = parser.add_subparsers(dest="command", required=True)
-    subcommands.add_parser("update-data", help="Synchronize and process StatsBomb data")
-    process = subcommands.add_parser(
+    commands = command_parser.add_subparsers(dest="command", required=True)
+
+    commands.add_parser("update-data", help="Synchronize and process StatsBomb data")
+    process = commands.add_parser(
         "process-data", help="Reprocess an existing local StatsBomb checkout"
     )
     process.add_argument("--source-commit", default="local-fixture")
-    subcommands.add_parser("data-status", help="Print the current processed-data manifest")
-    football_data = subcommands.add_parser(
+    commands.add_parser("data-status", help="Print the StatsBomb data manifest")
+
+    football_data = commands.add_parser(
         "update-football-data",
-        help="Download and process recent football-data.org league matches",
+        help="Download and process recent football-data.org matches",
     )
     football_data.add_argument(
-        "--seasons",
-        nargs="+",
-        type=int,
-        default=[2024, 2025],
-        help="Season start years to download",
+        "--seasons", nargs="+", type=int, default=[2024, 2025]
     )
-    football_data.add_argument(
-        "--refresh",
-        action="store_true",
-        help="Download files again instead of using the raw cache",
+    football_data.add_argument("--refresh", action="store_true")
+    commands.add_parser(
+        "football-data-status", help="Print the football-data.org manifest"
     )
-    subcommands.add_parser(
-        "football-data-status",
-        help="Print the football-data.org processed-data manifest",
-    )
-    subcommands.add_parser(
+
+    commands.add_parser(
         "tune-model",
-        help="Tune on StatsBomb training data and recent football-data.org data",
+        help="Tune, refit on training plus validation, and save models/model.pkl",
     )
-    return parser
+    commands.add_parser(
+        "train",
+        help="Alias for tune-model; use one of these commands, not both",
+    )
+    commands.add_parser(
+        "backtest",
+        help="Evaluate the saved model once on the untouched test season",
+    )
+
+    predict = commands.add_parser("predict", help="Predict one future fixture")
+    predict.add_argument("--home-team", required=True)
+    predict.add_argument("--away-team", required=True)
+    predict.add_argument("--competition", required=True)
+    return command_parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    arguments = _parser().parse_args(argv)
+def tune_and_save(paths):
+    training_matches = load_matches(paths.matches_file)
+    recent_matches = load_football_matches(paths.football_data_matches_file)
+    result = tune_poisson_models(training_matches, recent_matches)
+    save_model(result["model"], paths.model_file)
+    return {
+        "best_window": result["best_window"],
+        "best_alpha": result["best_alpha"],
+        "validation_log_loss": result["validation_log_loss"],
+        "model_file": str(paths.model_file),
+        "grid": result["results"].to_dict(orient="records"),
+    }
+
+
+def main(argv=None):
+    arguments = parser().parse_args(argv)
     paths = ProjectPaths.from_root(arguments.project_root)
 
     if arguments.command == "update-data":
@@ -98,25 +118,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         output = asdict(summary)
     elif arguments.command == "football-data-status":
         output = load_manifest(paths.football_data_manifest_file)
-    else:
-        training_matches = load_matches(paths.matches_file)
+    elif arguments.command in ["tune-model", "train"]:
+        output = tune_and_save(paths)
+    elif arguments.command == "backtest":
+        model_bundle = load_model(paths.model_file)
         recent_matches = load_football_matches(paths.football_data_matches_file)
-        result = tune_external_poisson_models(training_matches, recent_matches)
-        output = {
-            "best_window": result["best_window"],
-            "best_alpha": result["best_alpha"],
-            "validation_log_loss": result["validation_log_loss"],
-            "test_matches": len(result["test_features"]),
-            "test_start": result["test_features"]["match_date"]
-            .min()
-            .date()
-            .isoformat(),
-            "test_end": result["test_features"]["match_date"]
-            .max()
-            .date()
-            .isoformat(),
-            "grid": result["results"].to_dict(orient="records"),
-        }
+        result = run_backtest(model_bundle, recent_matches)
+        save_backtest(
+            result,
+            paths.backtest_predictions_file,
+            paths.metrics_file,
+        )
+        output = result["metrics"]
+        output["predictions_file"] = str(paths.backtest_predictions_file)
+        output["metrics_file"] = str(paths.metrics_file)
+    else:
+        model_bundle = load_model(paths.model_file)
+        recent_matches = load_football_matches(paths.football_data_matches_file)
+        output = predict_match(
+            arguments.home_team,
+            arguments.away_team,
+            arguments.competition,
+            recent_matches,
+            model_bundle,
+        )
 
     print(json.dumps(output, indent=2, sort_keys=True))
     return 0

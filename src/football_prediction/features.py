@@ -1,10 +1,11 @@
-# Build pre-match goal features without using future matches.
-# Pandas holds the match table. Dictionaries and lists hold each team's history.
+# Build pre-match features without using the current or future match results.
 
 import math
 
 import pandas as pd
 
+
+MINIMUM_HISTORY = 3
 
 FEATURE_COLUMNS = [
     "home_rolling_goals_for",
@@ -15,6 +16,9 @@ FEATURE_COLUMNS = [
     "home_season_goals_against",
     "away_season_goals_for",
     "away_season_goals_against",
+]
+
+HISTORY_COLUMNS = [
     "home_history_matches",
     "away_history_matches",
     "home_season_matches",
@@ -37,19 +41,20 @@ OUTPUT_COLUMNS = [
     "away_goals",
 ]
 OUTPUT_COLUMNS.extend(FEATURE_COLUMNS)
+OUTPUT_COLUMNS.extend(HISTORY_COLUMNS)
 OUTPUT_COLUMNS.append("feature_supported")
 
 
-def average(values, fallback):
+def average(values):
     if not values:
-        return fallback
+        return math.nan
     return sum(values) / len(values)
 
 
-def season_average(totals, key, fallback):
+def season_average(totals, key):
     values = totals.get(key)
     if values is None or values["matches"] == 0:
-        return fallback
+        return math.nan
     return values["total"] / values["matches"]
 
 
@@ -57,28 +62,22 @@ def season_matches(totals, key):
     values = totals.get(key)
     if values is None:
         return 0
-    return int(values["matches"])
+    return values["matches"]
 
 
 def add_season_goals(totals, key, goals):
-    # Add one earlier match to a team's season totals.
     if key not in totals:
         totals[key] = {"total": 0.0, "matches": 0}
     totals[key]["total"] += goals
     totals[key]["matches"] += 1
 
 
-def competition_average(totals, competition_key):
-    values = totals.get(competition_key)
-    if values is None or values["teams"] == 0:
-        return math.nan
-    return values["goals"] / values["teams"]
-
-
-def build_features(matches, rolling_window=5):
-    # Create one feature row per eligible match using earlier dates only.
+def build_features(matches, rolling_window=5, minimum_history=MINIMUM_HISTORY):
+    # The rolling window controls how many recent matches describe current form.
     if rolling_window < 1:
         raise ValueError("rolling_window must be at least 1")
+    if minimum_history < 1:
+        raise ValueError("minimum_history must be at least 1")
 
     required = {
         "match_id",
@@ -104,15 +103,14 @@ def build_features(matches, rolling_window=5):
     data["match_date"] = pd.to_datetime(data["match_date"])
     data = data.sort_values(["match_date", "match_id"]).reset_index(drop=True)
 
-    # These dictionaries only contain information from earlier match dates.
+    # Each dictionary contains results from earlier dates only.
     team_histories = {}
-    season_goals_for_totals = {}
-    season_goals_against_totals = {}
-    competition_goal_totals = {}
+    season_goals_for = {}
+    season_goals_against = {}
     feature_rows = []
 
-    # Calculate every match on a date before adding that date to the history.
-    # This stops one same-day match from affecting another same-day match.
+    # Every match on one date is calculated before that date updates history.
+    # This is why two matches played on the same date cannot leak into each other.
     for _, date_matches in data.groupby("match_date", sort=True):
         pending_updates = []
 
@@ -122,19 +120,17 @@ def build_features(matches, rolling_window=5):
             season_id = int(match.season_id)
             home_id = int(match.home_team_id)
             away_id = int(match.away_team_id)
-            competition_key = (source, competition_id)
-            # New teams use the competition's earlier goal average as a fallback.
-            competition_fallback = competition_average(
-                competition_goal_totals, competition_key
-            )
 
-            # Include the source so equal IDs from two providers never mix teams.
+            # Provider is part of the key because providers use different team IDs.
             home_key = (source, competition_id, home_id)
             away_key = (source, competition_id, away_id)
             home_history = team_histories.get(home_key, {"for": [], "against": []})
             away_history = team_histories.get(away_key, {"for": [], "against": []})
+
             home_season_key = (source, competition_id, season_id, home_id)
             away_season_key = (source, competition_id, season_id, away_id)
+            home_season_matches = season_matches(season_goals_for, home_season_key)
+            away_season_matches = season_matches(season_goals_for, away_season_key)
 
             row = {
                 "source": source,
@@ -151,49 +147,44 @@ def build_features(matches, rolling_window=5):
                 "home_goals": int(match.home_goals),
                 "away_goals": int(match.away_goals),
                 "home_rolling_goals_for": average(
-                    home_history["for"][-rolling_window:], competition_fallback
+                    home_history["for"][-rolling_window:]
                 ),
                 "home_rolling_goals_against": average(
-                    home_history["against"][-rolling_window:], competition_fallback
+                    home_history["against"][-rolling_window:]
                 ),
                 "away_rolling_goals_for": average(
-                    away_history["for"][-rolling_window:], competition_fallback
+                    away_history["for"][-rolling_window:]
                 ),
                 "away_rolling_goals_against": average(
-                    away_history["against"][-rolling_window:], competition_fallback
+                    away_history["against"][-rolling_window:]
                 ),
                 "home_season_goals_for": season_average(
-                    season_goals_for_totals, home_season_key, competition_fallback
+                    season_goals_for, home_season_key
                 ),
                 "home_season_goals_against": season_average(
-                    season_goals_against_totals, home_season_key, competition_fallback
+                    season_goals_against, home_season_key
                 ),
                 "away_season_goals_for": season_average(
-                    season_goals_for_totals, away_season_key, competition_fallback
+                    season_goals_for, away_season_key
                 ),
                 "away_season_goals_against": season_average(
-                    season_goals_against_totals, away_season_key, competition_fallback
+                    season_goals_against, away_season_key
                 ),
                 "home_history_matches": len(home_history["for"]),
                 "away_history_matches": len(away_history["for"]),
-                "home_season_matches": season_matches(
-                    season_goals_for_totals, home_season_key
-                ),
-                "away_season_matches": season_matches(
-                    season_goals_for_totals, away_season_key
-                ),
+                "home_season_matches": home_season_matches,
+                "away_season_matches": away_season_matches,
             }
 
-            # The model can only use a row when every feature is a real number.
-            row["feature_supported"] = True
-            for column in FEATURE_COLUMNS:
-                if not math.isfinite(float(row[column])):
-                    row["feature_supported"] = False
-                    break
+            # Early-season rows are excluded instead of being filled by fallbacks.
+            row["feature_supported"] = (
+                home_season_matches >= minimum_history
+                and away_season_matches >= minimum_history
+            )
             feature_rows.append(row)
             pending_updates.append(match)
 
-        # Only now is this date added to the histories used by later dates.
+        # Shift the goals by updating histories only after features are recorded.
         for match in pending_updates:
             source = str(match.source)
             competition_id = int(match.competition_id)
@@ -202,7 +193,6 @@ def build_features(matches, rolling_window=5):
             away_id = int(match.away_team_id)
             home_goals = float(match.home_goals)
             away_goals = float(match.away_goals)
-            competition_key = (source, competition_id)
 
             home_key = (source, competition_id, home_id)
             away_key = (source, competition_id, away_id)
@@ -211,24 +201,16 @@ def build_features(matches, rolling_window=5):
             if away_key not in team_histories:
                 team_histories[away_key] = {"for": [], "against": []}
 
-            home_history = team_histories[home_key]
-            away_history = team_histories[away_key]
-            home_history["for"].append(home_goals)
-            home_history["against"].append(away_goals)
-            away_history["for"].append(away_goals)
-            away_history["against"].append(home_goals)
+            team_histories[home_key]["for"].append(home_goals)
+            team_histories[home_key]["against"].append(away_goals)
+            team_histories[away_key]["for"].append(away_goals)
+            team_histories[away_key]["against"].append(home_goals)
 
             home_season_key = (source, competition_id, season_id, home_id)
             away_season_key = (source, competition_id, season_id, away_id)
-            add_season_goals(season_goals_for_totals, home_season_key, home_goals)
-            add_season_goals(season_goals_against_totals, home_season_key, away_goals)
-            add_season_goals(season_goals_for_totals, away_season_key, away_goals)
-            add_season_goals(season_goals_against_totals, away_season_key, home_goals)
-
-            if competition_key not in competition_goal_totals:
-                competition_goal_totals[competition_key] = {"goals": 0.0, "teams": 0}
-            competition = competition_goal_totals[competition_key]
-            competition["goals"] += home_goals + away_goals
-            competition["teams"] += 2
+            add_season_goals(season_goals_for, home_season_key, home_goals)
+            add_season_goals(season_goals_against, home_season_key, away_goals)
+            add_season_goals(season_goals_for, away_season_key, away_goals)
+            add_season_goals(season_goals_against, away_season_key, home_goals)
 
     return pd.DataFrame(feature_rows, columns=OUTPUT_COLUMNS)

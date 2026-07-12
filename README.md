@@ -1,171 +1,238 @@
-# Football Match Prediction Model
+# Football Match Prediction
 
-This project predicts football results with two fitted Poisson regression models:
-one for home goals and one for away goals. It currently covers the Premier League,
-Bundesliga, Ligue 1, Serie A, and La Liga.
+This project predicts football results with two Poisson regressions:
 
-The rebuild uses two data sources:
+- one model predicts the expected home goals, `lambda_home`;
+- one model predicts the expected away goals, `lambda_away`.
 
-- StatsBomb Open Data supplies the older training matches.
-- football-data.org supplies recent results for validation and final testing.
+The project covers the Premier League, Bundesliga, Ligue 1, Serie A, and La Liga.
+One pooled model is used across all five competitions. Competition is included as
+a categorical input, so each league can have a different average scoring level.
 
-## Current progress
+## Workflow
 
-Phase 1 and the modelling work in Phase 2 are complete.
+```text
+historical matches
+-> rolling and season-to-date features
+-> home and away Poisson regressions
+-> tune rolling window and regularization
+-> freeze and save the selected model
+-> evaluate once on the untouched 2025/26 season
+-> compare with a competition-average baseline
+-> predict future fixtures
+```
 
-- StatsBomb: 2,169 processed matches from 27 competition-seasons, ending on
-  18 May 2024.
-- football-data.org: 3,501 finished regular-time matches from the 2024/25 and
-  2025/26 seasons, ending on 24 May 2026.
-- All five leagues are included.
-- The best validation settings are an 8-match rolling window and `alpha=0.1`.
-- Validation 1X2 log loss is `1.0274`.
-- The 1,751 supported matches in 2025/26 remain separate from model selection.
+There are no hand-written favourite boosts, lambda multipliers, or subjective
+adjustments after prediction.
 
-That last season has not been scored yet. Its one-time comparison against a simple
-baseline belongs to Phase 3.
+## Data roles
 
-## Why the model now uses goals instead of xG
+Two data sources have different chronological roles:
 
-StatsBomb provides xG, but football-data.org provides results without xG. A single
-xG feature model therefore cannot use both sources fairly.
+1. StatsBomb Open Data supplies the older training matches.
+2. football-data.org 2024/25 selects the rolling window and regularization.
+3. football-data.org 2025/26 is the untouched final test season.
 
-Both sources do provide final goals. The shared model now builds the same goal-form
-features from both sources. StatsBomb xG is still retained in its processed data,
-so it can be used in a separate experiment later.
+The final test season must not influence the feature list, model structure,
+rolling-window choice, alpha choice, or baseline design. Earlier results within
+2025/26 may update features for later test matches. This represents making a new
+prediction each match week while keeping the fitted model frozen.
 
-## How the modelling works
+The synchronization, API, caching, and parsing code is kept separately under
+`src/football_prediction/data/`. The educational modelling workflow does not hide
+inside that data code.
 
-For every match, the feature builder looks only at matches from earlier dates. It
-calculates:
+## Features
 
-- recent goals scored and conceded by both teams;
+For each match, the feature builder calculates:
+
+- rolling goals scored and conceded by both teams;
 - season-to-date goals scored and conceded by both teams;
-- the number of earlier matches behind each average;
-- the competition in which the match was played.
+- the competition.
 
-If a team has no earlier match, the code uses the league's earlier goal average.
-If the league also has no earlier match, that row is marked unsupported. All games
-on one date are calculated before that date updates the histories, which prevents
-same-day leakage.
+The rolling window controls how many recent matches represent current form. A
+window of 3 reacts quickly, while a window of 8 is steadier.
 
-Team IDs are kept separate for each provider. The code does not try to guess that
-a StatsBomb team ID and a football-data.org team ID are the same club.
+Features must be shifted: the goals from the match being predicted cannot be used
+to predict that same match. The code therefore calculates every match on a date
+before adding any results from that date to team history. This also prevents one
+same-date match from leaking into another.
 
-The data roles are explicit:
+Both teams need at least three earlier matches in the current season. Earlier rows
+are marked unsupported and excluded instead of being filled by a complicated
+fallback hierarchy.
 
-1. Fit candidate models on the 2,169 StatsBomb matches.
-2. Choose the rolling window and regularization using football-data.org 2024/25.
-3. Refit the chosen model on StatsBomb plus 2024/25.
-4. Keep football-data.org 2025/26 for the final test.
+## Poisson regressions
 
-Earlier results within the final season may update the form used for later matches.
-This copies how predictions would work week by week, while the fitted model and its
-settings remain frozen.
+The two models use a small scikit-learn pipeline:
 
-The two regressions produce `lambda_home` and `lambda_away`: the model's expected
-number of goals for each team. The regression is written directly with NumPy and
-SciPy. NumPy builds the input matrix and evaluates the Poisson formula, while
-`scipy.optimize.minimize` finds the weights that give the smallest loss. There is
-no scikit-learn pipeline hidden behind the fitting step.
+1. `StandardScaler` scales the eight numerical features.
+2. `OneHotEncoder` converts competition IDs into categorical columns.
+3. `PoissonRegressor` fits expected goal counts.
 
-The probability code calculates every scoreline probability from the two Poisson
-distributions. Adding the relevant score cells gives home-win, draw, and away-win
-probabilities. The largest cell is the most likely scoreline.
+The regularization value `alpha` controls how strongly coefficients are pulled
+toward zero. This helps prevent the model from fitting noise. The tuning grid is:
 
-There are no hand-written favourite boosts or adjustments after prediction.
+```text
+rolling window: 3, 5, 8
+alpha:          0.01, 0.1, 1.0
+```
 
-## Setup
+Every one of the nine validation results is printed. Once the best settings are
+selected, the model is refitted on the older training data plus 2024/25 and saved.
+
+## Result probabilities
+
+Each fitted model produces a Poisson lambda, which is its expected number of goals.
+The probability code calculates all scorelines from 0-0 through 10-10. Adding the
+relevant cells gives:
+
+- home-win probability;
+- draw probability;
+- away-win probability.
+
+The cells are normalized to account for the tiny probability above ten goals. The
+largest cell is the most likely scoreline. The calculation is deterministic.
+
+## Baseline and final backtest
+
+The baseline is deliberately simple. Before each match it calculates the earlier
+competition average for:
+
+- goals scored by home teams;
+- goals scored by away teams.
+
+The current match and later matches are never included. The fitted model and
+baseline use the same Poisson probability function and exactly the same test rows.
+
+The final report contains:
+
+- multiclass log loss;
+- multiclass Brier score;
+- 1X2 accuracy;
+- home-goal MAE;
+- away-goal MAE;
+- combined goal MAE.
+
+Lower log loss, Brier score, and MAE are better. Higher accuracy is better. The
+metrics JSON states honestly whether the fitted model beats the baseline on log
+loss.
+
+## Installation
 
 Python 3.10 or newer is required.
 
-```bash
+```powershell
 python -m pip install -e ".[dev]"
 ```
 
-Create an ignored `.env` file in the project root for football-data.org:
+For football-data.org downloads, create an ignored `.env` file in the project root:
 
 ```text
 FOOTBALL_DATA_API_KEY=your_own_token
 ```
 
-Never commit this file or paste the token into source code.
+Never commit or print this token.
 
-## Commands you can run
+## Commands
 
 Download or refresh StatsBomb data:
 
-```bash
+```powershell
 python -m football_prediction.cli update-data
 ```
 
-Download the two recent football-data.org seasons:
+Download football-data.org 2024/25 and 2025/26:
 
-```bash
+```powershell
 python -m football_prediction.cli update-football-data --seasons 2024 2025
 ```
 
-The downloaded JSON is cached. Running the same command again processes the local
-cache without making repeat API calls unless `--refresh` is added.
+Inspect the two data manifests:
 
-Inspect both data summaries:
-
-```bash
+```powershell
 python -m football_prediction.cli data-status
 python -m football_prediction.cli football-data-status
 ```
 
-Run the real Phase 2 tuning workflow:
+Tune all nine configurations, refit, and save the selected model:
 
-```bash
+```powershell
 python -m football_prediction.cli tune-model
 ```
 
-This prints the best settings, all nine validation results, and the dates and size
-of the untouched final-test period. It does not report final-test performance.
+`train` is an alias for the same operation. Run one command, not both:
+
+```powershell
+python -m football_prediction.cli train
+```
+
+Evaluate the saved model once on 2025/26:
+
+```powershell
+python -m football_prediction.cli backtest
+```
+
+The backtest refuses to overwrite existing reports. This discourages repeatedly
+checking the test season and then changing the model around its result.
+
+Predict one future fixture:
+
+```powershell
+python -m football_prediction.cli predict `
+  --home-team "Arsenal FC" `
+  --away-team "Chelsea FC" `
+  --competition "Premier League"
+```
 
 Run all tests:
 
-```bash
+```powershell
 python -m pytest
 ```
 
-## Main modelling files
+## Output files
 
-- `src/football_prediction/features.py` builds leakage-safe pre-match features.
-- `src/football_prediction/model.py` fits and tunes the two Poisson regressions
-  using ordinary functions, NumPy arrays, SciPy, loops, and dictionaries.
-- `src/football_prediction/probabilities.py` converts expected goals into exact
-  score and 1X2 probabilities.
-- `src/football_prediction/data/football_data.py` handles the recent API data.
-- `src/football_prediction/cli.py` contains the commands shown above.
+Only three final artifacts are written:
 
-The model and probability functions return dictionaries. This keeps intermediate
-values visible and makes them easy to inspect, for example:
-
-```python
-from football_prediction.model import fit_poisson_models, predict_goals
-from football_prediction.probabilities import calculate_probabilities
-
-model = fit_poisson_models(training_features, alpha=0.1)
-home_lambdas, away_lambdas = predict_goals(model, new_features)
-probabilities = calculate_probabilities(home_lambdas[0], away_lambdas[0])
-print(probabilities["home_win"])
+```text
+models/model.pkl
+reports/backtest_predictions.csv
+reports/metrics.json
 ```
 
-Pandas remains because the extracted matches naturally form a labelled table.
-The actual mathematics uses NumPy, SciPy, and Python's `math` module.
+The saved model dictionary contains the home model, away model, selected window,
+selected alpha, feature columns, training cutoff date, and supported competitions.
 
-## Current limitations
+## Main files
 
-- Goals are noisier than xG and may react more slowly to changes in performance.
-- Home and away goal counts are treated as independent Poisson variables.
-- Injuries, line-ups, transfers, and red-card information are not model features.
-- StatsBomb coverage is uneven across leagues and seasons.
-- Clubs are not matched across the two providers; only the learned model
-  coefficients and competition categories are shared.
-- Final test metrics, a competition-average baseline, saved model artifacts, and
-  the new interface are later phases.
+- `features.py`: builds shifted rolling and season features. Read the date loop and
+  notice that history updates happen only after a date's features are complete.
+- `model.py`: defines the visible scikit-learn pipeline, fits both regressions, tries
+  the 3x3 grid, and refits the selected model without using the test targets.
+- `probabilities.py`: converts the two lambdas into the 0-10 score matrix and 1X2
+  probabilities.
+- `backtest.py`: creates the causal competition baseline, match-level predictions,
+  metrics, and the two report files.
+- `prediction.py`: saves and loads the model dictionary and predicts one future
+  fixture from the latest available team histories.
+- `cli.py`: connects the data, training, backtest, and prediction commands.
+
+## Limitations
+
+- Goals are noisy and may react slowly to changes in team performance.
+- Home and away goals are treated as independent Poisson variables.
+- Injuries, line-ups, transfers, red cards, and bookmaker odds are not features.
+- StatsBomb coverage is uneven between competitions and seasons.
+- The strict history rule leaves no supported older Bundesliga training rows in
+  the partial StatsBomb sample. Bundesliga keeps a fixed competition column and
+  gains fitted league information when 2024/25 joins the final refit.
+- Team IDs are kept separate between data providers rather than guessed across
+  providers.
+- A team needs three earlier matches in the current season before prediction.
+- The future prediction function expects exact team and competition names from the
+  recent processed data.
+- The Streamlit interface is still a later, separate step.
 
 Data sources: [StatsBomb Open Data](https://github.com/statsbomb/open-data) and
 [football-data.org](https://www.football-data.org/).

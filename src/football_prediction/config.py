@@ -44,6 +44,9 @@ class ProjectPaths:
     football_data_raw_directory: Path
     football_data_matches_file: Path
     football_data_manifest_file: Path
+    model_file: Path
+    backtest_predictions_file: Path
+    metrics_file: Path
 
     @classmethod
     def from_root(cls, root: Path) -> "ProjectPaths":
@@ -58,4 +61,7 @@ class ProjectPaths:
             football_data_raw_directory=root / "data" / "raw" / "football-data",
             football_data_matches_file=processed / "football_data_matches.parquet",
             football_data_manifest_file=processed / "football_data_manifest.json",
+            model_file=root / "models" / "model.pkl",
+            backtest_predictions_file=root / "reports" / "backtest_predictions.csv",
+            metrics_file=root / "reports" / "metrics.json",
         )

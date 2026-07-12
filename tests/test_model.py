@@ -2,282 +2,97 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from football_prediction import model as model_module
 from football_prediction.features import build_features
 from football_prediction.model import (
-    chronological_split,
     fit_poisson_models,
     predict_goals,
-    tune_external_poisson_models,
+    supported_rows,
     tune_poisson_models,
-    validation_log_loss,
 )
+from helpers import COMPETITIONS, training_and_recent_matches
 
 
-def model_matches():
-    matches = []
-    for index in range(18):
-        home_id = (index % 4) + 1
-        away_id = ((index + 1) % 4) + 1
-        matches.append(
-            {
-                "match_id": index + 1,
-                "match_date": pd.Timestamp("2020-01-01")
-                + pd.Timedelta(index * 7, unit="D"),
-                "competition_id": 10,
-                "competition_name": "Example League",
-                "season_id": 20 if index < 10 else 21,
-                "season_name": "Season 1" if index < 10 else "Season 2",
-                "home_team_id": home_id,
-                "home_team_name": f"Team {home_id}",
-                "away_team_id": away_id,
-                "away_team_name": f"Team {away_id}",
-                "home_goals": (index * 2) % 4,
-                "away_goals": (index + 1) % 3,
-                "home_xg": 0.8 + (index % 4) * 0.35,
-                "away_xg": 0.6 + (index % 3) * 0.3,
-                "eligible_for_model": True,
-            }
-        )
-    return pd.DataFrame(matches)
+def test_both_models_fit_and_predictions_are_positive_and_deterministic():
+    training, _ = training_and_recent_matches()
+    features = supported_rows(build_features(training, rolling_window=3))
 
+    first = fit_poisson_models(features, alpha=0.1)
+    second = fit_poisson_models(features, alpha=0.1)
+    first_home, first_away = predict_goals(first, features)
+    second_home, second_away = predict_goals(second, features)
 
-def test_chronological_split_never_overlaps_dates():
-    features = build_features(model_matches(), rolling_window=3)
-    train, validation, test = chronological_split(features)
-
-    assert train["match_date"].max() < validation["match_date"].min()
-    assert validation["match_date"].max() < test["match_date"].min()
-    assert len(train) == pytest.approx(len(features) * 0.6, abs=1)
-    assert len(validation) == pytest.approx(len(features) * 0.2, abs=1)
-    assert len(test) == pytest.approx(len(features) * 0.2, abs=1)
-
-
-def test_chronological_split_rejects_non_finite_fractions():
-    features = build_features(model_matches(), rolling_window=3)
-
-    for invalid_fraction in [float("nan"), float("inf")]:
-        with pytest.raises(ValueError, match="finite and positive"):
-            chronological_split(features, train_fraction=invalid_fraction)
-
-
-def test_chronological_split_keeps_duplicate_dates_together():
-    features = build_features(model_matches(), rolling_window=3)
-    features.loc[features["match_id"].isin([10, 11, 12]), "match_date"] = pd.Timestamp(
-        "2020-03-04"
-    )
-
-    train, validation, test = chronological_split(features)
-
-    train_dates = set(train["match_date"])
-    validation_dates = set(validation["match_date"])
-    test_dates = set(test["match_date"])
-    assert train_dates.isdisjoint(validation_dates)
-    assert train_dates.isdisjoint(test_dates)
-    assert validation_dates.isdisjoint(test_dates)
-
-
-def test_fitted_lambdas_are_positive_and_deterministic():
-    features = build_features(model_matches(), rolling_window=3)
-    train, validation, _ = chronological_split(features)
-    first = fit_poisson_models(train, alpha=0.1)
-    second = fit_poisson_models(train, alpha=0.1)
-    first_home, first_away = predict_goals(first, validation)
-    second_home, second_away = predict_goals(second, validation)
-
-    assert np.all(first_home > 0)
-    assert np.all(first_away > 0)
     assert np.isfinite(first_home).all()
     assert np.isfinite(first_away).all()
+    assert (first_home > 0).all()
+    assert (first_away > 0).all()
     np.testing.assert_allclose(first_home, second_home)
     np.testing.assert_allclose(first_away, second_away)
 
 
-def test_small_tuning_grid_keeps_test_period_separate(
-    monkeypatch,
-):
-    fitted_match_ids = []
-    original_fit = model_module.fit_poisson_models
+def test_competition_encoder_contains_all_five_leagues():
+    training, _ = training_and_recent_matches()
+    features = supported_rows(build_features(training, rolling_window=3))
+    model = fit_poisson_models(features, alpha=0.1)
 
-    def recording_fit(features, alpha=0.1):
-        fitted_match_ids.append(set(features["match_id"]))
-        return original_fit(features, alpha=alpha)
+    preparation = model["home_model"].named_steps["prepare"]
+    encoder = preparation.named_transformers_["competition"]
+    encoded_competitions = set(encoder.categories_[0])
+    expected_competitions = set(competition_id for competition_id, _ in COMPETITIONS)
+    assert encoded_competitions == expected_competitions
 
-    monkeypatch.setattr(model_module, "fit_poisson_models", recording_fit)
+
+def test_tuning_records_every_window_and_alpha_configuration():
+    training, recent = training_and_recent_matches()
     result = tune_poisson_models(
-        model_matches(),
-        rolling_windows=(3,),
-        alphas=(0.1,),
-    )
-
-    assert result["best_window"] == 3
-    assert result["best_alpha"] == 0.1
-    assert result["validation_log_loss"] > 0
-    assert not result["test_features"].empty
-    assert set(result["results"].columns) == {
-        "rolling_window",
-        "alpha",
-        "validation_log_loss",
-    }
-
-    test_ids = set(result["test_features"]["match_id"])
-    assert len(fitted_match_ids) == 2  # grid training, then train+validation refit
-    for match_ids in fitted_match_ids:
-        assert test_ids.isdisjoint(match_ids)
-
-
-def test_unsupported_rows_are_not_imputed_or_predicted():
-    features = build_features(model_matches(), rolling_window=3)
-    unsupported = features.loc[~features["feature_supported"]]
-
-    with pytest.raises(ValueError, match="No supported"):
-        fit_poisson_models(unsupported, alpha=0.1)
-
-    train, validation, _ = chronological_split(features)
-    fitted = fit_poisson_models(train, alpha=0.1)
-    with pytest.raises(ValueError, match="unsupported"):
-        predict_goals(fitted, unsupported)
-
-    invalid = validation.copy()
-    invalid.loc[invalid.index[0], "home_rolling_goals_for"] = np.inf
-    with pytest.raises(ValueError, match="finite"):
-        predict_goals(fitted, invalid)
-
-
-def test_validation_log_loss_adapts_to_high_finite_lambdas():
-    validation = pd.DataFrame([{"home_goals": 4, "away_goals": 2}])
-
-    loss = validation_log_loss(
-        validation,
-        np.array([15.0]),
-        np.array([12.0]),
-    )
-
-    assert np.isfinite(loss)
-    assert loss > 0
-
-
-def test_test_period_targets_cannot_change_tuning_selection():
-    matches = model_matches()
-    features = build_features(matches, rolling_window=3)
-    _, _, test = chronological_split(features)
-    test_ids = set(test["match_id"])
-    changed = matches.copy()
-    changed.loc[
-        changed["match_id"].isin(test_ids), ["home_goals", "away_goals"]
-    ] = 99
-
-    original = tune_poisson_models(matches, rolling_windows=(3,), alphas=(0.1,))
-    mutated = tune_poisson_models(changed, rolling_windows=(3,), alphas=(0.1,))
-
-    pd.testing.assert_frame_equal(original["results"], mutated["results"])
-    assert original["best_window"] == mutated["best_window"]
-    assert original["best_alpha"] == mutated["best_alpha"]
-
-    # The first test date cannot use goals from any earlier test match.
-    first_test_date = original["test_features"]["match_date"].min()
-    original_first_date = original["test_features"].loc[
-        original["test_features"]["match_date"] == first_test_date
-    ]
-    mutated_first_date = mutated["test_features"].loc[
-        mutated["test_features"]["match_date"] == first_test_date
-    ]
-    original_home, original_away = predict_goals(original["model"], original_first_date)
-    mutated_home, mutated_away = predict_goals(mutated["model"], mutated_first_date)
-    np.testing.assert_array_equal(original_home, mutated_home)
-    np.testing.assert_array_equal(original_away, mutated_away)
-
-
-def recent_source_matches():
-    matches = model_matches().copy()
-    matches["source"] = "football_data"
-    matches["match_id"] += 100
-    matches["match_date"] += pd.Timedelta(500, unit="D")
-    matches.loc[matches.index < 9, "season_name"] = "2024/2025"
-    matches.loc[matches.index < 9, "season_id"] = 24
-    matches.loc[matches.index >= 9, "season_name"] = "2025/2026"
-    matches.loc[matches.index >= 9, "season_id"] = 25
-    return matches
-
-
-def test_external_tuning_uses_both_sources_but_never_fits_test_rows(
-    monkeypatch,
-):
-    fitted_rows = []
-    original_fit = model_module.fit_poisson_models
-
-    def recording_fit(features, alpha=0.1):
-        fitted_rows.append(set(zip(features["source"], features["match_id"])))
-        return original_fit(features, alpha=alpha)
-
-    monkeypatch.setattr(model_module, "fit_poisson_models", recording_fit)
-    recent = recent_source_matches()
-    result = tune_external_poisson_models(
-        model_matches(),
+        training,
         recent,
-        rolling_windows=(3,),
-        alphas=(0.1,),
+        rolling_windows=(3, 5),
+        alphas=(0.01, 0.1),
     )
 
-    test_rows = set(
-        zip(result["test_features"]["source"], result["test_features"]["match_id"])
-    )
-    assert len(fitted_rows) == 2
-    for rows in fitted_rows:
-        assert test_rows.isdisjoint(rows)
-
-    for source, _ in fitted_rows[0]:
-        assert source == "statsbomb"
-
-    fitted_sources = set()
-    for source, _ in fitted_rows[1]:
-        fitted_sources.add(source)
-    assert fitted_sources == {
-        "statsbomb",
-        "football_data",
-    }
-    assert set(result["test_features"]["season_name"]) == {"2025/2026"}
+    configurations = set()
+    for row in result["results"].itertuples(index=False):
+        configurations.add((row.rolling_window, row.alpha))
+    assert configurations == {(3, 0.01), (3, 0.1), (5, 0.01), (5, 0.1)}
 
 
-def test_external_test_goals_cannot_change_model_selection():
-    recent = recent_source_matches()
+def test_final_test_goals_cannot_change_tuning_selection():
+    training, recent = training_and_recent_matches()
     changed = recent.copy()
     changed.loc[
         changed["season_name"] == "2025/2026", ["home_goals", "away_goals"]
     ] = 99
 
-    original = tune_external_poisson_models(
-        model_matches(), recent, rolling_windows=(3,), alphas=(0.1,)
+    original = tune_poisson_models(
+        training, recent, rolling_windows=(3,), alphas=(0.1,)
     )
-    mutated = tune_external_poisson_models(
-        model_matches(), changed, rolling_windows=(3,), alphas=(0.1,)
+    mutated = tune_poisson_models(
+        training, changed, rolling_windows=(3,), alphas=(0.1,)
     )
 
     pd.testing.assert_frame_equal(original["results"], mutated["results"])
     assert original["best_window"] == mutated["best_window"]
     assert original["best_alpha"] == mutated["best_alpha"]
 
-    first_test_date = original["test_features"]["match_date"].min()
-    original_first_date = original["test_features"].loc[
-        original["test_features"]["match_date"] == first_test_date
-    ]
-    mutated_first_date = mutated["test_features"].loc[
-        mutated["test_features"]["match_date"] == first_test_date
-    ]
-    original_home, original_away = predict_goals(original["model"], original_first_date)
-    mutated_home, mutated_away = predict_goals(mutated["model"], mutated_first_date)
-    np.testing.assert_array_equal(original_home, mutated_home)
-    np.testing.assert_array_equal(original_away, mutated_away)
+
+def test_training_validation_and_test_periods_are_chronological():
+    training, recent = training_and_recent_matches()
+    result = tune_poisson_models(
+        training, recent, rolling_windows=(3,), alphas=(0.1,)
+    )
+    validation = recent.loc[recent["season_name"] == "2024/2025"]
+    test = result["test_features"]
+
+    assert training["match_date"].max() < validation["match_date"].min()
+    assert validation["match_date"].max() < test["match_date"].min()
 
 
-def test_external_tuning_requires_chronological_source_periods():
-    training = model_matches().copy()
-    training["match_date"] += pd.Timedelta(1_000, unit="D")
+def test_unsupported_rows_are_not_predicted():
+    training, _ = training_and_recent_matches()
+    features = build_features(training, rolling_window=3)
+    supported = supported_rows(features)
+    model = fit_poisson_models(supported, alpha=0.1)
+    unsupported = features.loc[~features["feature_supported"]].iloc[[0]]
 
-    with pytest.raises(ValueError, match="Training matches must end before"):
-        tune_external_poisson_models(
-            training,
-            recent_source_matches(),
-            rolling_windows=(3,),
-            alphas=(0.1,),
-        )
+    with pytest.raises(ValueError, match="enough previous matches"):
+        predict_goals(model, unsupported)

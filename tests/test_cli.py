@@ -81,7 +81,9 @@ def test_tune_model_command_loads_both_sources_and_reports_result(
 ):
     training_matches = object()
     recent_matches = object()
+    fitted_model = object()
     loaded_paths = []
+    saved_models = []
 
     def fake_load_matches(path):
         loaded_paths.append(path)
@@ -95,17 +97,10 @@ def test_tune_model_command_loads_both_sources_and_reports_result(
         assert training is training_matches
         assert recent is recent_matches
         return {
+            "model": fitted_model,
             "best_window": 5,
             "best_alpha": 0.1,
             "validation_log_loss": 0.91,
-            "test_features": pd.DataFrame(
-                {
-                    "match_date": [
-                        pd.Timestamp("2025-08-15"),
-                        pd.Timestamp("2026-05-24"),
-                    ]
-                }
-            ),
             "results": pd.DataFrame(
                 [
                     {
@@ -117,19 +112,22 @@ def test_tune_model_command_loads_both_sources_and_reports_result(
             ),
         }
 
+    def fake_save_model(model, path):
+        saved_models.append((model, path))
+
     monkeypatch.setattr(cli_module, "load_matches", fake_load_matches)
     monkeypatch.setattr(
         cli_module, "load_football_matches", fake_load_football_matches
     )
-    monkeypatch.setattr(cli_module, "tune_external_poisson_models", fake_tune)
+    monkeypatch.setattr(cli_module, "tune_poisson_models", fake_tune)
+    monkeypatch.setattr(cli_module, "save_model", fake_save_model)
 
     assert main(["--project-root", str(tmp_path), "tune-model"]) == 0
 
     paths = cli_module.ProjectPaths.from_root(tmp_path)
     assert loaded_paths == [paths.matches_file, paths.football_data_matches_file]
+    assert saved_models == [(fitted_model, paths.model_file)]
     output = capsys.readouterr().out
     assert '"best_window": 5' in output
     assert '"best_alpha": 0.1' in output
-    assert '"test_matches": 2' in output
-    assert '"test_start": "2025-08-15"' in output
-    assert '"test_end": "2026-05-24"' in output
+    assert '"model_file":' in output
