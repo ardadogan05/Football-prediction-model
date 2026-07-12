@@ -1,20 +1,20 @@
 import numpy as np
 import pytest
 
-from football_prediction.probabilities import (
-    calculate_probabilities,
-    required_score_cutoff,
-)
+from football_prediction.probabilities import calculate_probabilities
 
 
-def test_poisson_probabilities_sum_to_one():
+def test_score_matrix_is_nonnegative_and_probabilities_sum_to_one():
     result = calculate_probabilities(1.5, 1.1)
     total = result["home_win"] + result["draw"] + result["away_win"]
-    assert total == pytest.approx(1.0)
+
+    assert np.all(result["score_matrix"] >= 0)
+    assert result["score_matrix"].shape == (11, 11)
     assert result["score_matrix"].sum() == pytest.approx(1.0)
+    assert total == pytest.approx(1.0)
 
 
-def test_equal_lambdas_give_equal_home_and_away_probabilities():
+def test_symmetric_lambdas_give_symmetric_result_probabilities():
     result = calculate_probabilities(1.4, 1.4)
     assert result["home_win"] == pytest.approx(result["away_win"])
 
@@ -25,63 +25,20 @@ def test_larger_home_lambda_increases_home_win_probability():
     assert higher["home_win"] > lower["home_win"]
 
 
-def test_small_score_limit_rejects_a_large_missing_tail():
-    with pytest.raises(ValueError, match="captures only"):
-        calculate_probabilities(5.0, 4.0, max_score=3)
-
-
-def test_invalid_score_limits_are_rejected():
-    for invalid_max_score in [True, 0, 3.5]:
-        with pytest.raises(ValueError, match="positive integer"):
-            calculate_probabilities(1.5, 1.1, max_score=invalid_max_score)
-
-
-def test_non_finite_lambdas_are_rejected():
-    invalid_lambdas = [float("nan"), float("inf"), -float("inf")]
-    for invalid_lambda in invalid_lambdas:
-        with pytest.raises(ValueError, match="finite and positive"):
-            calculate_probabilities(invalid_lambda, 1.0)
-        with pytest.raises(ValueError, match="finite and positive"):
-            calculate_probabilities(1.0, invalid_lambda)
-
-
-def test_invalid_minimum_captured_mass_is_rejected():
-    invalid_masses = [
-        float("nan"),
-        float("inf"),
-        -float("inf"),
-        -0.1,
-        0.0,
-        1.0,
-        1.1,
-    ]
-    for invalid_mass in invalid_masses:
-        with pytest.raises(ValueError, match="strictly between 0 and 1"):
-            calculate_probabilities(1.5, 1.1, minimum_captured_mass=invalid_mass)
-        with pytest.raises(ValueError, match="strictly between 0 and 1"):
-            required_score_cutoff(1.5, 1.1, minimum_captured_mass=invalid_mass)
-
-
-def test_score_matrix_is_nonnegative_and_deterministic():
+def test_most_likely_score_is_deterministic():
     first = calculate_probabilities(1.5, 1.1)
     second = calculate_probabilities(1.5, 1.1)
-
-    assert np.all(first["score_matrix"] >= 0)
-    np.testing.assert_array_equal(first["score_matrix"], second["score_matrix"])
     assert first["most_likely_score"] == second["most_likely_score"]
+    np.testing.assert_array_equal(first["score_matrix"], second["score_matrix"])
 
 
-def test_required_score_cutoff_handles_high_lambdas():
-    with pytest.raises(ValueError, match="captures only"):
-        calculate_probabilities(15.0, 12.0)
-
-    cutoff = required_score_cutoff(15.0, 12.0)
-
-    assert cutoff > 10
-    result = calculate_probabilities(15.0, 12.0, max_score=cutoff)
-    assert result["captured_mass"] >= 0.99
+def test_fixed_matrix_captures_realistic_football_lambdas():
+    for home_lambda, away_lambda in [(0.5, 0.5), (1.5, 1.1), (3.0, 2.5)]:
+        result = calculate_probabilities(home_lambda, away_lambda)
+        assert result["captured_mass"] >= 0.99
 
 
-def test_unrealistic_lambdas_do_not_create_an_enormous_matrix():
-    with pytest.raises(ValueError, match="too large"):
-        required_score_cutoff(1000.0, 1000.0)
+def test_invalid_lambdas_are_rejected():
+    for invalid_lambda in [float("nan"), float("inf"), 0.0, -1.0]:
+        with pytest.raises(ValueError, match="finite and positive"):
+            calculate_probabilities(invalid_lambda, 1.0)
