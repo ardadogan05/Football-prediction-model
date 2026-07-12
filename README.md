@@ -81,6 +81,32 @@ alpha:          0.01, 0.1, 1.0
 Every one of the nine validation results is printed. Once the best settings are
 selected, the model is refitted on the older training data plus 2024/25 and saved.
 
+## Final selected model and test result
+
+The validation grid selected:
+
+```text
+rolling window: 3
+alpha: 0.1
+validation log loss: 1.0119
+```
+
+The frozen model was then evaluated once on 1,606 supported matches from 2025/26,
+covering 12 September 2025 through 24 May 2026.
+
+| Metric | Fitted model | Competition-average baseline |
+|---|---:|---:|
+| Multiclass log loss | 1.0151 | 1.0742 |
+| Multiclass Brier score | 0.6073 | 0.6498 |
+| 1X2 accuracy | 50.25% | 43.59% |
+| Home-goal MAE | 0.9682 | 1.0258 |
+| Away-goal MAE | 0.8512 | 0.8999 |
+| Combined goal MAE | 0.9097 | 0.9628 |
+
+The fitted model beat the baseline on every reported metric. These test results
+were recorded after the model settings were frozen; the model was not retuned after
+viewing them.
+
 ## Result probabilities
 
 Each fitted model produces a Poisson lambda, which is its expected number of goals.
