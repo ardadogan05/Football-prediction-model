@@ -14,6 +14,7 @@ dependencies = [
     "scikit-learn>=1.5,<2.0",
     "scipy>=1.10,<2.0",
     "joblib>=1.4,<2.0",
+    "streamlit>=1.41,<2.0",
 ]
 
 [project.optional-dependencies]

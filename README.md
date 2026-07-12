@@ -211,6 +211,17 @@ python -m football_prediction.cli predict `
   --competition "Premier League"
 ```
 
+Launch the Streamlit dashboard:
+
+```powershell
+streamlit run app.py
+```
+
+The dashboard includes a match predictor with team crests, model probabilities and
+model-implied decimal odds, a model-performance page, and a filterable backtest
+explorer. The implied odds are calculated as `1 / probability`; they are not
+bookmaker prices and do not include a margin.
+
 Run all tests:
 
 ```powershell
