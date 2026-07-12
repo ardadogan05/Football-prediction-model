@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -7,7 +5,7 @@ import pytest
 from football_prediction.features import FEATURE_COLUMNS, build_features
 
 
-def example_matches() -> pd.DataFrame:
+def example_matches():
     rows = [
         (1, "2020-01-01", 1, 2, 2, 1),
         (2, "2020-01-01", 3, 4, 1, 0),
@@ -37,7 +35,7 @@ def example_matches() -> pd.DataFrame:
     return pd.DataFrame(matches)
 
 
-def test_features_use_only_matches_from_earlier_dates() -> None:
+def test_features_use_only_matches_from_earlier_dates():
     features = build_features(example_matches(), rolling_window=3)
 
     first_date = features.loc[features["match_date"] == pd.Timestamp("2020-01-01")]
@@ -55,7 +53,7 @@ def test_features_use_only_matches_from_earlier_dates() -> None:
     assert bool(second_date_match["feature_supported"])
 
 
-def test_current_and_future_goals_cannot_change_earlier_features() -> None:
+def test_current_and_future_goals_cannot_change_earlier_features():
     original_matches = example_matches()
     original = build_features(original_matches, rolling_window=3)
 
@@ -65,18 +63,17 @@ def test_current_and_future_goals_cannot_change_earlier_features() -> None:
     ] = 9
     changed = build_features(changed_matches, rolling_window=3)
 
-    columns = [
-        column
-        for column in original.columns
-        if column not in ["home_goals", "away_goals"]
-    ]
+    columns = []
+    for column in original.columns:
+        if column not in ["home_goals", "away_goals"]:
+            columns.append(column)
     pd.testing.assert_frame_equal(
         original.loc[original["match_id"] <= 5, columns].reset_index(drop=True),
         changed.loc[changed["match_id"] <= 5, columns].reset_index(drop=True),
     )
 
 
-def test_same_date_goals_cannot_change_another_matchs_fallback_features() -> None:
+def test_same_date_goals_cannot_change_another_matchs_fallback_features():
     matches = example_matches()
     matches.loc[matches["match_id"] == 6, "match_date"] = "2020-01-15"
     matches.loc[matches["match_id"] == 6, "home_team_id"] = 5
@@ -91,7 +88,8 @@ def test_same_date_goals_cannot_change_another_matchs_fallback_features() -> Non
     ] = 99
     changed = build_features(changed_matches, rolling_window=3)
 
-    compared_columns = [*FEATURE_COLUMNS, "feature_supported"]
+    compared_columns = FEATURE_COLUMNS.copy()
+    compared_columns.append("feature_supported")
     pd.testing.assert_series_equal(
         original.loc[original["match_id"] == 6, compared_columns].iloc[0],
         changed.loc[changed["match_id"] == 6, compared_columns].iloc[0],
@@ -99,7 +97,7 @@ def test_same_date_goals_cannot_change_another_matchs_fallback_features() -> Non
     assert bool(original.loc[original["match_id"] == 6, "feature_supported"].iloc[0])
 
 
-def test_season_counts_reset_without_resetting_competition_history() -> None:
+def test_season_counts_reset_without_resetting_competition_history():
     matches = example_matches()
     matches.loc[matches["match_id"] >= 5, "season_id"] = 21
     matches.loc[matches["match_id"] >= 5, "season_name"] = "2020/2021"
@@ -120,7 +118,7 @@ def test_season_counts_reset_without_resetting_competition_history() -> None:
     assert later_match["away_season_matches"] == 1
 
 
-def test_feature_supported_matches_finiteness_of_model_features() -> None:
+def test_feature_supported_matches_finiteness_of_model_features():
     features = build_features(example_matches(), rolling_window=3)
     finite_features = np.isfinite(
         features[FEATURE_COLUMNS].to_numpy(dtype=float)
@@ -129,7 +127,7 @@ def test_feature_supported_matches_finiteness_of_model_features() -> None:
     np.testing.assert_array_equal(features["feature_supported"], finite_features)
 
 
-def test_team_ids_from_different_sources_do_not_share_history() -> None:
+def test_team_ids_from_different_sources_do_not_share_history():
     matches = example_matches()
     matches["source"] = "statsbomb"
     new_source_match = matches.iloc[[0]].copy()
@@ -146,6 +144,6 @@ def test_team_ids_from_different_sources_do_not_share_history() -> None:
     assert not bool(new_source_features["feature_supported"])
 
 
-def test_invalid_rolling_window_is_rejected() -> None:
+def test_invalid_rolling_window_is_rejected():
     with pytest.raises(ValueError, match="at least 1"):
         build_features(example_matches(), rolling_window=0)

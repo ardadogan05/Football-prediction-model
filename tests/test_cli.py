@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from pathlib import Path
 import shutil
 
@@ -14,8 +12,8 @@ FIXTURE_REPOSITORY = Path(__file__).parent / "fixtures" / "statsbomb"
 
 
 def test_process_data_and_status_commands_are_offline(
-    tmp_path: Path, capsys
-) -> None:
+    tmp_path, capsys
+):
     raw = tmp_path / "data" / "raw" / "statsbomb-open-data"
     shutil.copytree(FIXTURE_REPOSITORY, raw)
 
@@ -37,8 +35,8 @@ def test_process_data_and_status_commands_are_offline(
 
 
 def test_football_data_commands_report_summary_and_status(
-    tmp_path: Path, capsys, monkeypatch
-) -> None:
+    tmp_path, capsys, monkeypatch
+):
     manifest = tmp_path / "data" / "processed" / "football_data_manifest.json"
 
     def fake_sync(paths, seasons, refresh):
@@ -79,17 +77,17 @@ def test_football_data_commands_report_summary_and_status(
 
 
 def test_tune_model_command_loads_both_sources_and_reports_result(
-    tmp_path: Path, capsys, monkeypatch
-) -> None:
+    tmp_path, capsys, monkeypatch
+):
     training_matches = object()
     recent_matches = object()
     loaded_paths = []
 
-    def fake_load_matches(path: Path):
+    def fake_load_matches(path):
         loaded_paths.append(path)
         return training_matches
 
-    def fake_load_football_matches(path: Path):
+    def fake_load_football_matches(path):
         loaded_paths.append(path)
         return recent_matches
 
