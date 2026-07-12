@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import shutil
-from types import SimpleNamespace
 
 import pandas as pd
 
@@ -97,11 +96,11 @@ def test_tune_model_command_loads_both_sources_and_reports_result(
     def fake_tune(training, recent):
         assert training is training_matches
         assert recent is recent_matches
-        return SimpleNamespace(
-            best_window=5,
-            best_alpha=0.1,
-            validation_log_loss=0.91,
-            test_features=pd.DataFrame(
+        return {
+            "best_window": 5,
+            "best_alpha": 0.1,
+            "validation_log_loss": 0.91,
+            "test_features": pd.DataFrame(
                 {
                     "match_date": [
                         pd.Timestamp("2025-08-15"),
@@ -109,7 +108,7 @@ def test_tune_model_command_loads_both_sources_and_reports_result(
                     ]
                 }
             ),
-            results=pd.DataFrame(
+            "results": pd.DataFrame(
                 [
                     {
                         "rolling_window": 5,
@@ -118,7 +117,7 @@ def test_tune_model_command_loads_both_sources_and_reports_result(
                     }
                 ]
             ),
-        )
+        }
 
     monkeypatch.setattr(cli_module, "load_matches", fake_load_matches)
     monkeypatch.setattr(

@@ -103,13 +103,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         recent_matches = load_football_matches(paths.football_data_matches_file)
         result = tune_external_poisson_models(training_matches, recent_matches)
         output = {
-            "best_window": result.best_window,
-            "best_alpha": result.best_alpha,
-            "validation_log_loss": result.validation_log_loss,
-            "test_matches": len(result.test_features),
-            "test_start": result.test_features["match_date"].min().date().isoformat(),
-            "test_end": result.test_features["match_date"].max().date().isoformat(),
-            "grid": result.results.to_dict(orient="records"),
+            "best_window": result["best_window"],
+            "best_alpha": result["best_alpha"],
+            "validation_log_loss": result["validation_log_loss"],
+            "test_matches": len(result["test_features"]),
+            "test_start": result["test_features"]["match_date"]
+            .min()
+            .date()
+            .isoformat(),
+            "test_end": result["test_features"]["match_date"]
+            .max()
+            .date()
+            .isoformat(),
+            "grid": result["results"].to_dict(orient="records"),
         }
 
     print(json.dumps(output, indent=2, sort_keys=True))

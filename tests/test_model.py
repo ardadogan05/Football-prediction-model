@@ -7,11 +7,12 @@ import pytest
 from football_prediction import model as model_module
 from football_prediction.features import build_features
 from football_prediction.model import (
-    _validation_log_loss,
     chronological_split,
     fit_poisson_models,
+    predict_goals,
     tune_external_poisson_models,
     tune_poisson_models,
+    validation_log_loss,
 )
 
 
@@ -85,8 +86,8 @@ def test_fitted_lambdas_are_positive_and_deterministic() -> None:
     train, validation, _ = chronological_split(features)
     first = fit_poisson_models(train, alpha=0.1)
     second = fit_poisson_models(train, alpha=0.1)
-    first_home, first_away = first.predict(validation)
-    second_home, second_away = second.predict(validation)
+    first_home, first_away = predict_goals(first, validation)
+    second_home, second_away = predict_goals(second, validation)
 
     assert np.all(first_home > 0)
     assert np.all(first_away > 0)
@@ -113,18 +114,17 @@ def test_small_tuning_grid_keeps_test_period_separate(
         alphas=(0.1,),
     )
 
-    assert result.best_window == 3
-    assert result.best_alpha == 0.1
-    assert result.validation_log_loss > 0
-    assert not result.test_features.empty
-    assert {
-        "home_poisson_deviance",
-        "away_poisson_deviance",
-        "mean_poisson_deviance",
-    }.issubset(result.results.columns)
-    assert np.isfinite(result.results["mean_poisson_deviance"]).all()
+    assert result["best_window"] == 3
+    assert result["best_alpha"] == 0.1
+    assert result["validation_log_loss"] > 0
+    assert not result["test_features"].empty
+    assert set(result["results"].columns) == {
+        "rolling_window",
+        "alpha",
+        "validation_log_loss",
+    }
 
-    test_ids = set(result.test_features["match_id"])
+    test_ids = set(result["test_features"]["match_id"])
     assert len(fitted_match_ids) == 2  # grid training, then train+validation refit
     assert all(test_ids.isdisjoint(match_ids) for match_ids in fitted_match_ids)
 
@@ -139,18 +139,18 @@ def test_unsupported_rows_are_not_imputed_or_predicted() -> None:
     train, validation, _ = chronological_split(features)
     fitted = fit_poisson_models(train, alpha=0.1)
     with pytest.raises(ValueError, match="unsupported"):
-        fitted.predict(unsupported)
+        predict_goals(fitted, unsupported)
 
     invalid = validation.copy()
     invalid.loc[invalid.index[0], "home_rolling_goals_for"] = np.inf
     with pytest.raises(ValueError, match="finite"):
-        fitted.predict(invalid)
+        predict_goals(fitted, invalid)
 
 
 def test_validation_log_loss_adapts_to_high_finite_lambdas() -> None:
     validation = pd.DataFrame([{"home_goals": 4, "away_goals": 2}])
 
-    loss = _validation_log_loss(
+    loss = validation_log_loss(
         validation,
         np.array([15.0]),
         np.array([12.0]),
@@ -173,20 +173,20 @@ def test_test_period_targets_cannot_change_tuning_selection() -> None:
     original = tune_poisson_models(matches, rolling_windows=(3,), alphas=(0.1,))
     mutated = tune_poisson_models(changed, rolling_windows=(3,), alphas=(0.1,))
 
-    pd.testing.assert_frame_equal(original.results, mutated.results)
-    assert original.best_window == mutated.best_window
-    assert original.best_alpha == mutated.best_alpha
+    pd.testing.assert_frame_equal(original["results"], mutated["results"])
+    assert original["best_window"] == mutated["best_window"]
+    assert original["best_alpha"] == mutated["best_alpha"]
 
     # The first test date cannot use goals from any earlier test match.
-    first_test_date = original.test_features["match_date"].min()
-    original_first_date = original.test_features.loc[
-        original.test_features["match_date"] == first_test_date
+    first_test_date = original["test_features"]["match_date"].min()
+    original_first_date = original["test_features"].loc[
+        original["test_features"]["match_date"] == first_test_date
     ]
-    mutated_first_date = mutated.test_features.loc[
-        mutated.test_features["match_date"] == first_test_date
+    mutated_first_date = mutated["test_features"].loc[
+        mutated["test_features"]["match_date"] == first_test_date
     ]
-    original_home, original_away = original.model.predict(original_first_date)
-    mutated_home, mutated_away = mutated.model.predict(mutated_first_date)
+    original_home, original_away = predict_goals(original["model"], original_first_date)
+    mutated_home, mutated_away = predict_goals(mutated["model"], mutated_first_date)
     np.testing.assert_array_equal(original_home, mutated_home)
     np.testing.assert_array_equal(original_away, mutated_away)
 
@@ -223,7 +223,7 @@ def test_external_tuning_uses_both_sources_but_never_fits_test_rows(
     )
 
     test_rows = set(
-        zip(result.test_features["source"], result.test_features["match_id"])
+        zip(result["test_features"]["source"], result["test_features"]["match_id"])
     )
     assert len(fitted_rows) == 2
     assert all(test_rows.isdisjoint(rows) for rows in fitted_rows)
@@ -232,7 +232,7 @@ def test_external_tuning_uses_both_sources_but_never_fits_test_rows(
         "statsbomb",
         "football_data",
     }
-    assert set(result.test_features["season_name"]) == {"2025/2026"}
+    assert set(result["test_features"]["season_name"]) == {"2025/2026"}
 
 
 def test_external_test_goals_cannot_change_model_selection() -> None:
@@ -249,19 +249,19 @@ def test_external_test_goals_cannot_change_model_selection() -> None:
         model_matches(), changed, rolling_windows=(3,), alphas=(0.1,)
     )
 
-    pd.testing.assert_frame_equal(original.results, mutated.results)
-    assert original.best_window == mutated.best_window
-    assert original.best_alpha == mutated.best_alpha
+    pd.testing.assert_frame_equal(original["results"], mutated["results"])
+    assert original["best_window"] == mutated["best_window"]
+    assert original["best_alpha"] == mutated["best_alpha"]
 
-    first_test_date = original.test_features["match_date"].min()
-    original_first_date = original.test_features.loc[
-        original.test_features["match_date"] == first_test_date
+    first_test_date = original["test_features"]["match_date"].min()
+    original_first_date = original["test_features"].loc[
+        original["test_features"]["match_date"] == first_test_date
     ]
-    mutated_first_date = mutated.test_features.loc[
-        mutated.test_features["match_date"] == first_test_date
+    mutated_first_date = mutated["test_features"].loc[
+        mutated["test_features"]["match_date"] == first_test_date
     ]
-    original_home, original_away = original.model.predict(original_first_date)
-    mutated_home, mutated_away = mutated.model.predict(mutated_first_date)
+    original_home, original_away = predict_goals(original["model"], original_first_date)
+    mutated_home, mutated_away = predict_goals(mutated["model"], mutated_first_date)
     np.testing.assert_array_equal(original_home, mutated_home)
     np.testing.assert_array_equal(original_away, mutated_away)
 

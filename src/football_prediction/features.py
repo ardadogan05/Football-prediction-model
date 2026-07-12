@@ -1,6 +1,5 @@
-"""Build pre-match goal features without using future matches."""
-
-from __future__ import annotations
+# Build pre-match goal features without using future matches.
+# Pandas holds the match table. Dictionaries and lists hold each team's history.
 
 import math
 
@@ -41,45 +40,43 @@ OUTPUT_COLUMNS = [
 ]
 
 
-def _mean(values: list[float], fallback: float) -> float:
+def average(values, fallback):
     if not values:
         return fallback
     return sum(values) / len(values)
 
 
-def _season_average(totals: dict, key: tuple, fallback: float) -> float:
+def season_average(totals, key, fallback):
     values = totals.get(key)
     if values is None or values["matches"] == 0:
         return fallback
     return values["total"] / values["matches"]
 
 
-def _season_matches(totals: dict, key: tuple) -> int:
+def season_matches(totals, key):
     values = totals.get(key)
     if values is None:
         return 0
     return int(values["matches"])
 
 
-def _add_season_goals(totals: dict, key: tuple, goals: float) -> None:
-    """Add one earlier match to a team's season totals."""
-
+def add_season_goals(totals, key, goals):
+    # Add one earlier match to a team's season totals.
     if key not in totals:
         totals[key] = {"total": 0.0, "matches": 0}
     totals[key]["total"] += goals
     totals[key]["matches"] += 1
 
 
-def _competition_average(totals: dict, competition_key: tuple) -> float:
+def competition_average(totals, competition_key):
     values = totals.get(competition_key)
     if values is None or values["teams"] == 0:
         return math.nan
     return values["goals"] / values["teams"]
 
 
-def build_features(matches: pd.DataFrame, rolling_window: int = 5) -> pd.DataFrame:
-    """Create one feature row per eligible match using earlier dates only."""
-
+def build_features(matches, rolling_window=5):
+    # Create one feature row per eligible match using earlier dates only.
     if rolling_window < 1:
         raise ValueError("rolling_window must be at least 1")
 
@@ -127,7 +124,7 @@ def build_features(matches: pd.DataFrame, rolling_window: int = 5) -> pd.DataFra
             away_id = int(match.away_team_id)
             competition_key = (source, competition_id)
             # New teams use the competition's earlier goal average as a fallback.
-            competition_fallback = _competition_average(
+            competition_fallback = competition_average(
                 competition_goal_totals, competition_key
             )
 
@@ -153,36 +150,36 @@ def build_features(matches: pd.DataFrame, rolling_window: int = 5) -> pd.DataFra
                 "away_team_name": match.away_team_name,
                 "home_goals": int(match.home_goals),
                 "away_goals": int(match.away_goals),
-                "home_rolling_goals_for": _mean(
+                "home_rolling_goals_for": average(
                     home_history["for"][-rolling_window:], competition_fallback
                 ),
-                "home_rolling_goals_against": _mean(
+                "home_rolling_goals_against": average(
                     home_history["against"][-rolling_window:], competition_fallback
                 ),
-                "away_rolling_goals_for": _mean(
+                "away_rolling_goals_for": average(
                     away_history["for"][-rolling_window:], competition_fallback
                 ),
-                "away_rolling_goals_against": _mean(
+                "away_rolling_goals_against": average(
                     away_history["against"][-rolling_window:], competition_fallback
                 ),
-                "home_season_goals_for": _season_average(
+                "home_season_goals_for": season_average(
                     season_goals_for_totals, home_season_key, competition_fallback
                 ),
-                "home_season_goals_against": _season_average(
+                "home_season_goals_against": season_average(
                     season_goals_against_totals, home_season_key, competition_fallback
                 ),
-                "away_season_goals_for": _season_average(
+                "away_season_goals_for": season_average(
                     season_goals_for_totals, away_season_key, competition_fallback
                 ),
-                "away_season_goals_against": _season_average(
+                "away_season_goals_against": season_average(
                     season_goals_against_totals, away_season_key, competition_fallback
                 ),
                 "home_history_matches": len(home_history["for"]),
                 "away_history_matches": len(away_history["for"]),
-                "home_season_matches": _season_matches(
+                "home_season_matches": season_matches(
                     season_goals_for_totals, home_season_key
                 ),
-                "away_season_matches": _season_matches(
+                "away_season_matches": season_matches(
                     season_goals_for_totals, away_season_key
                 ),
             }
@@ -223,10 +220,10 @@ def build_features(matches: pd.DataFrame, rolling_window: int = 5) -> pd.DataFra
 
             home_season_key = (source, competition_id, season_id, home_id)
             away_season_key = (source, competition_id, season_id, away_id)
-            _add_season_goals(season_goals_for_totals, home_season_key, home_goals)
-            _add_season_goals(season_goals_against_totals, home_season_key, away_goals)
-            _add_season_goals(season_goals_for_totals, away_season_key, away_goals)
-            _add_season_goals(season_goals_against_totals, away_season_key, home_goals)
+            add_season_goals(season_goals_for_totals, home_season_key, home_goals)
+            add_season_goals(season_goals_against_totals, home_season_key, away_goals)
+            add_season_goals(season_goals_for_totals, away_season_key, away_goals)
+            add_season_goals(season_goals_against_totals, away_season_key, home_goals)
 
             if competition_key not in competition_goal_totals:
                 competition_goal_totals[competition_key] = {"goals": 0.0, "teams": 0}

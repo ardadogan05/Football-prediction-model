@@ -67,10 +67,14 @@ This copies how predictions would work week by week, while the fitted model and 
 settings remain frozen.
 
 The two regressions produce `lambda_home` and `lambda_away`: the model's expected
-number of goals for each team. The probability code then calculates every scoreline
-probability from the two Poisson distributions. Adding the relevant score cells
-gives home-win, draw, and away-win probabilities. The largest cell is the most
-likely scoreline.
+number of goals for each team. The regression is written directly with NumPy and
+SciPy. NumPy builds the input matrix and evaluates the Poisson formula, while
+`scipy.optimize.minimize` finds the weights that give the smallest loss. There is
+no scikit-learn pipeline hidden behind the fitting step.
+
+The probability code calculates every scoreline probability from the two Poisson
+distributions. Adding the relevant score cells gives home-win, draw, and away-win
+probabilities. The largest cell is the most likely scoreline.
 
 There are no hand-written favourite boosts or adjustments after prediction.
 
@@ -132,11 +136,28 @@ python -m pytest
 ## Main modelling files
 
 - `src/football_prediction/features.py` builds leakage-safe pre-match features.
-- `src/football_prediction/model.py` fits and tunes the two Poisson regressions.
+- `src/football_prediction/model.py` fits and tunes the two Poisson regressions
+  using ordinary functions, NumPy arrays, SciPy, loops, and dictionaries.
 - `src/football_prediction/probabilities.py` converts expected goals into exact
   score and 1X2 probabilities.
 - `src/football_prediction/data/football_data.py` handles the recent API data.
 - `src/football_prediction/cli.py` contains the commands shown above.
+
+The model and probability functions return dictionaries. This keeps intermediate
+values visible and makes them easy to inspect, for example:
+
+```python
+from football_prediction.model import fit_poisson_models, predict_goals
+from football_prediction.probabilities import calculate_probabilities
+
+model = fit_poisson_models(training_features, alpha=0.1)
+home_lambdas, away_lambdas = predict_goals(model, new_features)
+probabilities = calculate_probabilities(home_lambdas[0], away_lambdas[0])
+print(probabilities["home_win"])
+```
+
+Pandas remains because the extracted matches naturally form a labelled table.
+The actual mathematics uses NumPy, SciPy, and Python's `math` module.
 
 ## Current limitations
 
