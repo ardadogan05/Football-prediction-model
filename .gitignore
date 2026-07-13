@@ -1,5 +1,6 @@
 # .gitignore
 .env
+.agents/
 
 __pycache__/
 *.py[cod]
@@ -18,3 +19,4 @@ reports/
 .coverage
 *.egg-info/
 .venv/
+
