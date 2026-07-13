@@ -1,10 +1,5 @@
 # Football Match Prediction
 
-> **Documentation and development note:** This README was written by GPT-5.6 Sol
-> High based on internal dialogue about the project's design, experiments and
-> results. The data gathering and extraction code, along with the user interface,
-> was also created by GPT-5.6 Sol High.
-
 This project predicts football results using two Poisson regression models. A
 Poisson model is useful when the output is a count, such as the number of goals:
 
@@ -14,6 +9,18 @@ Poisson model is useful when the output is a count, such as the number of goals:
 The project covers the Premier League, Bundesliga, Ligue 1, Serie A, and La Liga.
 The same pair of models covers all five competitions. The league is also given to
 the model, because scoring levels can be different between leagues.
+
+## Dashboard preview
+
+Choose two teams to see the predicted score, expected goals, result probabilities
+and model-based decimal odds.
+
+![Arsenal against Chelsea match prediction](docs/images/predictor.png)
+
+The performance page shows the final test result and compares it with the simple
+league-average predictor.
+
+![Model performance results](docs/images/performance.png)
 
 ## Workflow
 
@@ -332,6 +339,12 @@ columns, the last training date and the supported leagues.
 - A team needs three earlier matches in the current season before prediction.
 - Future predictions need the exact team and league names found in the saved data.
 - The dashboard displays the model's results but does not change its predictions.
+
+## Development note
+
+This README was written by GPT-5.6 Sol High based on internal dialogue about the
+project's design, experiments and results. The data gathering and extraction code,
+along with the user interface, was also created by GPT-5.6 Sol High.
 
 Data sources: [StatsBomb Open Data](https://github.com/statsbomb/open-data) and
 [football-data.org](https://www.football-data.org/).
